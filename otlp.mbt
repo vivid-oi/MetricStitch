@@ -18,7 +18,11 @@ fn text(value : Json, path : String) -> String raise StitchError {
 }
 
 ///|
-fn attributes(value : Json) -> Json raise StitchError {
+fn attributes(
+  value : Json,
+  depth~ : Int32 = 0,
+  budget~ : Ref[Int32] = Ref(4096),
+) -> Json raise StitchError {
   let items = array(value, "attributes")
   let sorted : Array[(String, Json)] = []
   let seen : Map[String, Bool] = Map([])
@@ -29,11 +33,8 @@ fn attributes(value : Json) -> Json raise StitchError {
       raise Invalid("duplicate attribute key " + key)
     }
     seen[key] = true
-    let v = fields(required(pair, "value"), ["stringValue"], "attribute.value")
-    let s = text(required(v, "stringValue"), "stringValue")
-    sorted.push(
-      (key, { "key": Json(key), "value": { "stringValue": Json(s) } }),
-    )
+    let v = attribute_value(required(pair, "value"), depth, budget)
+    sorted.push((key, { "key": Json(key), "value": v }))
   }
   sorted.sort_by((a, b) => a.0.compare(b.0))
   Json::array(sorted.map(p => p.1))

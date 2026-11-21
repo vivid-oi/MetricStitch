@@ -27,8 +27,14 @@ and original state remain intact on failure. `parse_input(text)` rejects duplica
 decoded JSON object keys and limits nesting to 64 and text to 4M code units.
 
 The supported profile is DELTA monotonic Sum with nonnegative `asInt` decimal
-strings, positive strictly increasing nanosecond timestamps, and string-valued
-attributes. Attributes must have unique keys. Resource and scope identity includes
+strings and positive strictly increasing nanosecond timestamps. Attributes support
+strings, booleans, signed Int64 decimal strings, finite numeric doubles, base64
+bytes, arrays and key-value lists. Each attribute set has a 4096-value budget and
+16-level nesting limit. Attributes and nested key-value lists require unique keys.
+Identity preserves value kinds, canonicalizes integer/base64 representations and
+sorts key-value lists while retaining array order. Outgoing metadata preserves
+the original representation. Existing string-only series keys remain compatible.
+Resource and scope identity includes
 their attributes, scope name/version, both schema URLs, metric name/unit/description
 and point attributes. Attribute order does not affect identity. A description
 change deliberately creates a separate stream in this strict initial profile.
@@ -65,7 +71,7 @@ and executes the documented replay on Wasm and each native OS.
 
 ## Roadmap
 
-Double sums, explicit and exponential histograms, broader AnyValue attributes,
+Double sums, explicit and exponential histograms,
 out-of-order buffering, network receivers and multi-writer coordination are
 planned capabilities. The current profile requires contiguous intervals. It
 remembers only the most recent delta per series and does not offer unbounded

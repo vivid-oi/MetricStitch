@@ -20,15 +20,43 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
-  if args.length() < 2 || args.length() > 3 {
-    fail("usage: metricstitch INPUT.json [CHECKPOINT.json]")
+  let to_file = args.length() > 1 && args[1] == "apply-to"
+  let valid = if to_file {
+    args.length() == 4 || args.length() == 5
+  } else {
+    args.length() == 2 || args.length() == 3
   }
-  let state = if args.length() == 3 {
+  if !valid {
+    fail(
+      "usage: metricstitch INPUT.json [CHECKPOINT.json] | apply-to INPUT.json OUTPUT.json [PREVIOUS_RECEIPT.json]",
+    )
+  }
+  let state = if to_file && args.length() == 5 {
+    let receipt = read_json(args[4])
+    guard receipt is Object(obj) &&
+      obj.length() == 3 &&
+      receipt
+      is {
+        "checkpoint": checkpoint,
+        "request": Object(_),
+        "duplicates": Number(count, ..),
+        ..
+      } &&
+      count >= 0.0 &&
+      count.floor() == count &&
+      !count.is_inf() else {
+      fail(
+        "expected complete previous receipt with checkpoint, request and duplicate count",
+      )
+    }
+    @metricstitch.State::restore(checkpoint)
+  } else if !to_file && args.length() == 3 {
     @metricstitch.State::restore(read_json(args[2]))
   } else {
     @metricstitch.State::new()
   }
-  let result = @metricstitch.process_otlp(state, read_json(args[1]))
+  let input = args[if to_file { 2 } else { 1 }]
+  let result = @metricstitch.process_otlp(state, read_json(input))
   let receipt : Json = {
     "checkpoint": result.state.checkpoint(),
     "request": result.request,
@@ -38,7 +66,11 @@ async fn execute() -> Unit {
   if @utf8.encode(output).length() > 4000000 {
     fail("receipt exceeds 4 MB")
   }
-  @stdio.stdout.write(output)
+  if to_file {
+    publish_receipt(args[3], @utf8.encode(output))
+  } else {
+    @stdio.stdout.write(output)
+  }
 }
 
 ///|

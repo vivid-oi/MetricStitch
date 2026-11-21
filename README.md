@@ -53,6 +53,8 @@ moon update
 moon run checks/replay.mbtx -- moon wasm
 moon run --target wasm cli -- input.json
 moon run --target wasm cli -- next.json checkpoint.json
+moon run --target wasm cli -- apply-to input.json first.json
+moon run --target wasm cli -- apply-to next.json second.json first.json
 ```
 
 Success emits one JSON receipt containing `request`, `checkpoint` and `duplicates`.
@@ -60,7 +62,16 @@ The consumer extracts `request` for its exporter and persists `checkpoint` for t
 next call. Persisting the whole receipt as one artifact keeps the output and its
 state together. This CLI reads regular UTF-8 files up to 4 MB, emits at most 4 MB,
 and exits 2 on failure with diagnostics on stderr and no result on stdout.
-Callers own file publication, delivery acknowledgement and single-writer ordering.
+`apply-to` writes the complete receipt to a new destination. It validates all
+input, writes and syncs a sibling temporary file, closes it and publishes with
+replacement disabled. Existing destinations, including input or previous-receipt
+paths, are refused. Success has empty stdout. Failed publication cleans up its
+temporary file. The optional previous receipt supplies its validated checkpoint
+directly, so file-based callers can resume without extracting JSON fields.
+Receipt files are trusted local state, with structural validation rather than
+authentication. Callers own delivery acknowledgement and single-writer ordering.
+Directory crash durability and hostile concurrent filesystem mutation are outside
+this publication contract.
 
 Three intended uses are receiving integer deltas in a gateway, resuming a local
 agent after a checkpoint, and reproducing a faulty telemetry batch offline.
@@ -68,7 +79,8 @@ The replay demonstrates all three using the official OTLP example. It first
 verifies refusal of the unmodified example's unsupported types, then derives an
 Int64-only two-interval counter from its real protocol structure, retains its
 resource/scope/attributes, accumulates 5 and 7 into 12 across a checkpoint and
-checks retry suppression and error recovery. The intervals and integer values
+checks retry suppression, error recovery, whole-receipt resumption and refusal
+to overwrite existing files. The intervals and integer values
 are demonstration edits, not production telemetry. See SOURCES.md.
 
 The core supports wasm, wasm-gc, js and native. The async CLI supports wasm and

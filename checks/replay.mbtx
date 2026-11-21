@@ -27,9 +27,17 @@ async fn main {
   scope["metrics"] = Json::array([Json::object(metric)])
   let input = dir + "/input.json"
   let checkpoint = dir + "/checkpoint.json"
+  let receipt = dir + "/first receipt.json"
   @fs.write_file(input[:],source.stringify())
   let first = @shell.Cmd(moon,prefix + [input]).output()
   if first.exit_code() != 0 { fail(first.stderr()) }
+  let installed = @shell.Cmd(moon,prefix + ["apply-to",input,receipt]).output()
+  if installed.exit_code() != 0 || !installed.stdout().is_empty() || @fs.read_file(receipt[:]).text() != first.stdout() { fail("receipt publication failed") }
+  let overwritten = @shell.Cmd(moon,prefix + ["apply-to",input,receipt]).output()
+  if overwritten.exit_code() != 2 || @fs.read_file(receipt[:]).text() != first.stdout() { fail("existing receipt was overwritten") }
+  let original_input = @fs.read_file(input[:]).text()
+  let input_alias = @shell.Cmd(moon,prefix + ["apply-to",input,input]).output()
+  if input_alias.exit_code() != 2 || @fs.read_file(input[:]).text() != original_input { fail("input file was overwritten") }
   guard @json.parse(first.stdout()) is {"checkpoint":saved,"request":result,..} else { fail("invalid receipt") }
   if !result.stringify().contains("\"aggregationTemporality\":2") { fail("not cumulative") }
   @fs.write_file(checkpoint[:],saved.stringify())
@@ -41,6 +49,9 @@ async fn main {
   @fs.write_file(input[:],source.stringify())
   let second = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
   if second.exit_code() != 0 || !second.stdout().contains("\"asInt\":\"12\"") { fail("restored sum is wrong: " + second.stderr()) }
+  let next_receipt = dir + "/next receipt.json"
+  let resumed_file = @shell.Cmd(moon,prefix + ["apply-to",input,next_receipt,receipt]).output()
+  if resumed_file.exit_code() != 0 || @fs.read_file(next_receipt[:]).text() != second.stdout() { fail("whole-receipt resume failed") }
   ignore(point.remove("asInt"))
   point["asDouble"] = Json(1.25)
   @fs.write_file(input[:],source.stringify())
@@ -51,5 +62,14 @@ async fn main {
   @fs.write_file(input[:],"{\"resourceMetrics\":[],\"unknown\":true}")
   let bad = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
   if bad.exit_code() != 2 || !bad.stdout().is_empty() || @fs.read_file(checkpoint[:]).text() != saved.stringify() { fail("rejected input damaged a checkpoint") }
+  let refused_file = dir + "/refused.json"
+  let refused = @shell.Cmd(moon,prefix + ["apply-to",input,refused_file,receipt]).output()
+  if refused.exit_code() != 2 || @fs.exists(refused_file[:]) { fail("invalid batch published a receipt") }
+  @fs.write_file(input[:],"{}")
+  let malformed_receipt = @shell.Cmd(moon,prefix + ["apply-to","examples/upstream-metrics.json",refused_file,input]).output()
+  if malformed_receipt.exit_code() != 2 || !malformed_receipt.stderr().contains("previous receipt") || @fs.exists(refused_file[:]) { fail("malformed resume receipt was accepted") }
+  for name in @fs.readdir(dir[:]) {
+    if name.has_suffix(".pending") { fail("failed publication left a temporary receipt") }
+  }
   println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
 }

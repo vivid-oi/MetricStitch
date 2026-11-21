@@ -16,3 +16,6 @@
 * `moonbitlang/async` 0.22.5 provides CLI filesystem/process/runtime adapters,
   Apache-2.0. https://github.com/moonbitlang/async
 * The root Apache-2.0 license text comes from the owner's MoonPOMerge repository.
+* `cli/publish.mbt` adapts the Apache-2.0 temporary-file publication pattern from
+  https://github.com/vivid-oi/MoonPOMerge/blob/974bf668b480334dd2b38b1eaa6744faf9b26471/cmd/main/driver.mbt
+  That source credits FontPin and MBTRelMask.

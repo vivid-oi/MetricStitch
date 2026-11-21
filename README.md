@@ -12,6 +12,29 @@ New producer instances must have different series identities.
 Run `moon run examples/counter` to accumulate 7 and 5 into 12.
 Run `moon test --target wasm` for the public contract tests.
 
+## Complete local example
+
+The checked-in session adapts the pinned official OTLP example into two
+contiguous intervals. It includes a Double counter, Gauge and explicit histogram.
+Use new destination filenames for the following commands.
+
+```sh
+moon update
+moon run --target wasm cli -- replay-to examples/session.json session-receipt.json
+moon run --target wasm cli -- inspect session-receipt.json
+moon run --target wasm cli -- export session-receipt.json session-otlp.json
+moon run checks/protocol.mbtx -- session-otlp.json
+```
+
+The second interval has cumulative counter 7.5, histogram population 4 and Gauge
+11. Inspection reports two active series because Gauge has no cumulative state.
+The exported file is a standard OTLP request suitable for an existing exporter
+or receiver. The last command independently decodes it with the community
+OpenTelemetry generated model and verifies JSON and Protobuf round trips.
+This is protocol-model interoperability validation. A live Collector deployment
+is outside this example. `checks/replay.mbtx` exercises these same commands in
+a temporary directory on Wasm and all three native CI operating systems.
+
 Direct library callers provide series keys. `State::checkpoint` returns versioned
 JSON with exact decimal strings and sorted series. `State::restore` validates
 budgets, duplicate series, intervals and cumulative consistency before accepting
@@ -72,6 +95,16 @@ Receipt files are trusted local state, with structural validation rather than
 authentication. Callers own delivery acknowledgement and single-writer ordering.
 Directory crash durability and hostile concurrent filesystem mutation are outside
 this publication contract.
+
+`OtlpStep::receipt()` produces the receipt envelope. `decode_receipt(value)`
+validates the envelope, checkpoint and supported Cumulative request profile.
+It accepts historical points from a multi-request replay without accumulating
+them a second time. Validation does not prove a relationship between a modified
+checkpoint and its output, and does not establish delivery acknowledgement.
+`export RECEIPT.json OUTPUT.json` validates a receipt and publishes only its OTLP
+request to a new file, retaining the full receipt as the recovery artifact.
+`inspect RECEIPT.json` validates and reports state capacity and duplicate count.
+File-based resumption uses the same receipt validation as inspection and export.
 
 Three intended uses are receiving integer deltas in a gateway, resuming a local
 agent after a checkpoint, and reproducing a faulty telemetry batch offline.

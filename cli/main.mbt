@@ -20,6 +20,27 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && (args[1] == "export" || args[1] == "inspect") {
+    let exporting = args[1] == "export"
+    if args.length() != (if exporting { 4 } else { 3 }) {
+      fail("usage: export RECEIPT.json OUTPUT.json | inspect RECEIPT.json")
+    }
+    let receipt = @metricstitch.decode_receipt(read_json(args[2]))
+    if exporting {
+      let output = @utf8.encode(receipt.request.stringify() + "\n")
+      if output.length() > 4000000 {
+        fail("export exceeds 4 MB")
+      }
+      publish_receipt(args[3], output)
+    } else {
+      let report : Json = {
+        "state": receipt.state.summary(),
+        "duplicates": Json(receipt.duplicates),
+      }
+      @stdio.stdout.write(report.stringify() + "\n")
+    }
+    return
+  }
   let sequence = args.length() > 1 && args[1] == "replay-to"
   let to_file = args.length() > 1 && (args[1] == "apply-to" || sequence)
   let checking = args.length() > 1 && args[1] == "check"
@@ -36,24 +57,7 @@ async fn execute() -> Unit {
     )
   }
   let state = if to_file && args.length() == 5 {
-    let receipt = read_json(args[4])
-    guard receipt is Object(obj) &&
-      obj.length() == 3 &&
-      receipt
-      is {
-        "checkpoint": checkpoint,
-        "request": Object(_),
-        "duplicates": Number(count, ..),
-        ..
-      } &&
-      count >= 0.0 &&
-      count.floor() == count &&
-      !count.is_inf() else {
-      fail(
-        "expected complete previous receipt with checkpoint, request and duplicate count",
-      )
-    }
-    @metricstitch.State::restore(checkpoint)
+    @metricstitch.decode_receipt(read_json(args[4])).state
   } else if checking && args.length() == 4 {
     @metricstitch.State::restore(read_json(args[3]))
   } else if !to_file && !checking && args.length() == 3 {
@@ -92,11 +96,7 @@ async fn execute() -> Unit {
   } else {
     @metricstitch.process_otlp(state, request)
   }
-  let receipt : Json = {
-    "checkpoint": result.state.checkpoint(),
-    "request": result.request,
-    "duplicates": Json(result.duplicates),
-  }
+  let receipt = result.receipt()
   let output = receipt.stringify() + "\n"
   if @utf8.encode(output).length() > 4000000 {
     fail("receipt exceeds 4 MB")

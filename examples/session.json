@@ -1,0 +1,46 @@
+{
+  "requests": [
+    {
+      "resourceMetrics": [{
+        "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "my.service"}}]},
+        "scopeMetrics": [{
+          "scope": {"name": "my.library", "version": "1.0.0"},
+          "metrics": [
+            {"name": "my.counter", "unit": "1", "description": "I am a Counter", "sum": {
+              "aggregationTemporality": 1, "isMonotonic": true,
+              "dataPoints": [{"startTimeUnixNano": "1544712660000000000", "timeUnixNano": "1544712660300000000", "asDouble": 5}]
+            }},
+            {"name": "my.gauge", "unit": "1", "description": "I am a Gauge", "gauge": {
+              "dataPoints": [{"timeUnixNano": "1544712660300000000", "asDouble": 10}]
+            }},
+            {"name": "my.histogram", "unit": "1", "description": "I am a Histogram", "histogram": {
+              "aggregationTemporality": 1,
+              "dataPoints": [{"startTimeUnixNano": "1544712660000000000", "timeUnixNano": "1544712660300000000", "explicitBounds": [1], "bucketCounts": ["1", "1"], "count": "2", "sum": 2, "min": 0, "max": 2}]
+            }}
+          ]
+        }]
+      }]
+    },
+    {
+      "resourceMetrics": [{
+        "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "my.service"}}]},
+        "scopeMetrics": [{
+          "scope": {"name": "my.library", "version": "1.0.0"},
+          "metrics": [
+            {"name": "my.counter", "unit": "1", "description": "I am a Counter", "sum": {
+              "aggregationTemporality": 1, "isMonotonic": true,
+              "dataPoints": [{"startTimeUnixNano": "1544712660300000000", "timeUnixNano": "1544712660600000000", "asDouble": 2.5}]
+            }},
+            {"name": "my.gauge", "unit": "1", "description": "I am a Gauge", "gauge": {
+              "dataPoints": [{"timeUnixNano": "1544712660600000000", "asDouble": 11}]
+            }},
+            {"name": "my.histogram", "unit": "1", "description": "I am a Histogram", "histogram": {
+              "aggregationTemporality": 1,
+              "dataPoints": [{"startTimeUnixNano": "1544712660300000000", "timeUnixNano": "1544712660600000000", "explicitBounds": [1], "bucketCounts": ["1", "1"], "count": "2", "sum": 2, "min": 0, "max": 2}]
+            }}
+          ]
+        }]
+      }]
+    }
+  ]
+}

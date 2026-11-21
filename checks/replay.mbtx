@@ -88,7 +88,7 @@ async fn main {
   if refused.exit_code() != 2 || @fs.exists(refused_file[:]) { fail("invalid batch published a receipt") }
   @fs.write_file(input[:],"{}")
   let malformed_receipt = @shell.Cmd(moon,prefix + ["apply-to","examples/upstream-metrics.json",refused_file,input]).output()
-  if malformed_receipt.exit_code() != 2 || !malformed_receipt.stderr().contains("previous receipt") || @fs.exists(refused_file[:]) { fail("malformed resume receipt was accepted") }
+  if malformed_receipt.exit_code() != 2 || malformed_receipt.stderr().is_empty() || @fs.exists(refused_file[:]) { fail("malformed resume receipt was accepted") }
   for name in @fs.readdir(dir[:]) {
     if name.has_suffix(".pending") { fail("failed publication left a temporary receipt") }
   }
@@ -116,5 +116,34 @@ async fn main {
   if mixed.exit_code() != 0 { fail(mixed.stderr()) }
   guard @json.parse(mixed.stdout()) is {"request":{"resourceMetrics":[{"scopeMetrics":[{"metrics":Array(mixed_metrics),..}],..}],..},..} else { fail("mixed output") }
   if mixed_metrics.length() != 3 || mixed_metrics[1] != gauge { fail("Gauge changed or disappeared") }
+  let mixed_receipt = dir + "/mixed-receipt.json"
+  @fs.write_file(mixed_receipt[:],mixed.stdout())
+  let exported = dir + "/exported.json"
+  let exported_result = @shell.Cmd(moon,prefix + ["export",mixed_receipt,exported]).output()
+  if exported_result.exit_code() != 0 || !exported_result.stdout().is_empty() { fail("OTLP export failed: " + exported_result.stderr()) }
+  guard @json.parse(mixed.stdout()) is {"request":mixed_request,..} else { fail("mixed receipt") }
+  if @json.parse(@fs.read_file(exported[:]).text()) != mixed_request { fail("export changed request content") }
+  let repeated_export = @shell.Cmd(moon,prefix + ["export",mixed_receipt,exported]).output()
+  if repeated_export.exit_code() != 2 || @json.parse(@fs.read_file(exported[:]).text()) != mixed_request { fail("export overwrote an existing file") }
+  let inspected = @shell.Cmd(moon,prefix + ["inspect",mixed_receipt]).output()
+  if inspected.exit_code() != 0 || !inspected.stdout().contains("\"series\":2") { fail("receipt state inspection failed") }
+  @shell.Cmd(moon,["run","checks/protocol.mbtx","--",exported]).run()
+  let session_receipt = dir + "/session-receipt.json"
+  let session_export = dir + "/session-otlp.json"
+  @shell.Cmd(moon,prefix + ["replay-to","examples/session.json",session_receipt]).run()
+  @shell.Cmd(moon,prefix + ["export",session_receipt,session_export]).run()
+  let session = @fs.read_file(session_export[:]).text()
+  if !session.contains("\"asDouble\":7.5") || !session.contains("\"count\":\"4\"") || !session.contains("\"asDouble\":11") { fail("documented session output is wrong") }
+  @shell.Cmd(moon,["run","checks/protocol.mbtx","--",session_export]).run()
+  let exact_source = @json.parse(first_request.stringify())
+  guard exact_source is {"resourceMetrics":[{"scopeMetrics":[{"metrics":[{"sum":{"dataPoints":[Object(exact_point)],..},..}],..}],..}],..} else { fail("exact integer fixture") }
+  exact_point["asInt"] = Json("9007199254740993")
+  @fs.write_file(input[:],exact_source.stringify())
+  let exact_receipt = dir + "/exact-receipt.json"
+  let exact_export = dir + "/exact-otlp.json"
+  @shell.Cmd(moon,prefix + ["apply-to",input,exact_receipt]).run()
+  @shell.Cmd(moon,prefix + ["export",exact_receipt,exact_export]).run()
+  if !@fs.read_file(exact_export[:]).text().contains("\"asInt\":\"9007199254740993\"") { fail("large Int64 changed during export") }
+  @shell.Cmd(moon,["run","checks/protocol.mbtx","--",exact_export]).run()
   println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
 }

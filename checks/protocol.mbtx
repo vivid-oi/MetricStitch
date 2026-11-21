@@ -1,0 +1,25 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/buffer",
+  "moonbitlang/protobuf@0.1.3",
+  "moonbit-community/opentelemetry@0.1.8/protocol/collector/metrics/v1" @wire,
+}
+----
+async fn main {
+  let args = @env.args()
+  if args.length() != 2 { fail("usage: protocol.mbtx EXPORTED_OTLP.json") }
+  let input = @json.parse(@fs.read_file(args[1][:]).text())
+  let decoded : @wire.ExportMetricsServiceRequest = @json.from_json(input)
+  let again : @wire.ExportMetricsServiceRequest = @json.from_json(decoded.to_json())
+  if decoded != again { fail("external OTLP model JSON round trip changed data") }
+  if decoded.resource_metrics.is_empty() { fail("protocol check expects populated output") }
+  let buffer : @buffer.Buffer = @buffer.Buffer()
+  decoded.write(buffer)
+  let binary = @wire.ExportMetricsServiceRequest::read(@protobuf.BytesReader::from_bytes(buffer.to_bytes()))
+  if decoded != binary { fail("external OTLP model Protobuf round trip changed data") }
+  println("External OpenTelemetry model accepted JSON and Protobuf round trips")
+}

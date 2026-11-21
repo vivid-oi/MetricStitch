@@ -73,6 +73,7 @@ fn process_otlp_impl(
   state : State,
   request : Json,
   location : Ref[String],
+  cumulative~ : Bool = false,
 ) -> OtlpStep raise StitchError {
   let root = fields(request, ["resourceMetrics"], "request")
   location.val = "/resourceMetrics"
@@ -153,9 +154,10 @@ fn process_otlp_impl(
           },
           name + "." + kind,
         )
-        if required(sum, "aggregationTemporality") != Json(1) ||
+        if required(sum, "aggregationTemporality") !=
+          Json(if cumulative { 2 } else { 1 }) ||
           (!is_histogram && required(sum, "isMonotonic") != Json(true)) {
-          raise Invalid(name + ": expected DELTA histogram or monotonic Sum")
+          raise Invalid(name + ": unexpected temporality or non-monotonic Sum")
         }
         let points = []
         let points_path = metric_path + "/" + kind + "/dataPoints"
@@ -201,7 +203,10 @@ fn process_otlp_impl(
             raise Invalid("point requires exactly one numeric value")
           }
           let converted = if is_histogram {
-            let step = current.apply_histograms([read_histogram(identity, p)])
+            let point_state = if cumulative { State::new() } else { current }
+            let step = point_state.apply_histograms([
+              read_histogram(identity, p),
+            ])
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, histogram_json(p)))
@@ -212,7 +217,8 @@ fn process_otlp_impl(
               end,
               value: decimal(required(p, "asInt"), "asInt"),
             }
-            let step = current.apply([sample])
+            let point_state = if cumulative { State::new() } else { current }
+            let step = point_state.apply([sample])
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value.to_string())))
@@ -223,7 +229,8 @@ fn process_otlp_impl(
               end,
               value: finite_nonnegative(required(p, "asDouble")),
             }
-            let step = current.apply_doubles([sample])
+            let point_state = if cumulative { State::new() } else { current }
+            let step = point_state.apply_doubles([sample])
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value)))

@@ -1,0 +1,48 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+----
+async fn main {
+  let args = @env.args()
+  let moon = if args.length() > 1 { args[1] } else { "moon" }
+  let target = if args.length() > 2 { args[2] } else { "wasm" }
+  let dir = @fs.tmpdir(prefix="metricstitch-")
+  defer {
+    for file in @fs.readdir(dir[:]) { @fs.remove((dir + "/" + file)[:]) }
+    @fs.rmdir(dir[:])
+  }
+  let prefix = ["run","--target",target,"cli","--"]
+  let original = @shell.Cmd(moon,prefix + ["examples/upstream-metrics.json"]).output()
+  if original.exit_code() != 2 || !original.stdout().is_empty() { fail("unsupported official example was silently converted") }
+  let source = @json.parse(@fs.read_file("examples/upstream-metrics.json").text())
+  guard source is {"resourceMetrics":Array([Object(resource)]),..} && resource.get("scopeMetrics") is Some(Array([Object(scope)])) && scope.get("metrics") is Some(Array([Object(metric),..])) && metric.get("sum") is Some(Object(sum)) && sum.get("dataPoints") is Some(Array([Object(point)])) else { fail("upstream fixture shape changed") }
+  ignore(point.remove("asDouble"))
+  point["asInt"] = Json("5")
+  point["startTimeUnixNano"] = Json("1544712660000000000")
+  scope["metrics"] = Json::array([Json::object(metric)])
+  let input = dir + "/input.json"
+  let checkpoint = dir + "/checkpoint.json"
+  @fs.write_file(input[:],source.stringify())
+  let first = @shell.Cmd(moon,prefix + [input]).output()
+  if first.exit_code() != 0 { fail(first.stderr()) }
+  guard @json.parse(first.stdout()) is {"checkpoint":saved,"request":result,..} else { fail("invalid receipt") }
+  if !result.stringify().contains("\"aggregationTemporality\":2") { fail("not cumulative") }
+  @fs.write_file(checkpoint[:],saved.stringify())
+  let retry = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
+  if retry.exit_code() != 0 || !retry.stdout().contains("\"duplicates\":1") { fail("retry duplicated the count") }
+  point["startTimeUnixNano"] = Json("1544712660300000000")
+  point["timeUnixNano"] = Json("1544712660600000000")
+  point["asInt"] = Json("7")
+  @fs.write_file(input[:],source.stringify())
+  let second = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
+  if second.exit_code() != 0 || !second.stdout().contains("\"asInt\":\"12\"") { fail("restored sum is wrong: " + second.stderr()) }
+  @fs.write_file(input[:],"{\"resourceMetrics\":[],\"unknown\":true}")
+  let bad = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
+  if bad.exit_code() != 2 || !bad.stdout().is_empty() || @fs.read_file(checkpoint[:]).text() != saved.stringify() { fail("rejected input damaged a checkpoint") }
+  println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
+}

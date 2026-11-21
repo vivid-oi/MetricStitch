@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "vivid-oi/metricstitch"
 
+import {
+  "moonbitlang/core/json",
+}
+
 // Values
 
 // Errors
@@ -23,7 +27,9 @@ pub struct State {
   // private fields
 }
 pub fn State::apply(Self, Array[Sample]) -> Step raise StitchError
+pub fn State::checkpoint(Self) -> @json.Json
 pub fn State::new(max_series? : Int32) -> Self raise StitchError
+pub fn State::restore(@json.Json) -> Self raise StitchError
 
 pub(all) struct Step {
   state : State

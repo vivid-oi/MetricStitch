@@ -12,8 +12,12 @@ New producer instances must have different series identities.
 Run `moon run examples/counter` to accumulate 7 and 5 into 12.
 Run `moon test --target wasm` for the public contract tests.
 
-Direct library callers provide series keys. A standard OTLP adapter and durable
-checkpoints are planned next. Double sums, histograms, network receivers and
+Direct library callers provide series keys. `State::checkpoint` returns versioned
+JSON with exact decimal strings and sorted series. `State::restore` validates
+budgets, duplicate series, intervals and cumulative consistency before accepting
+state. Persistence and authenticity are the caller's responsibility. Unknown
+checkpoint fields and versions are rejected. Restored last-point retries remain
+idempotent. A standard OTLP adapter is planned next. Double sums, histograms, network receivers and
 multi-writer coordination are planned capabilities.
 
 The semantic reference is the OpenTelemetry metrics data model

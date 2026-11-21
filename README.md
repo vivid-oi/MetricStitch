@@ -101,6 +101,17 @@ version 3. Versions 1 and 2 remain readable and retain their existing output.
 The replay also exercises the pinned official histogram across two intervals
 and a saved receipt. Its times are edited to form contiguous positive intervals.
 
+## Validation
+
+`validate_otlp(state, request)` runs the complete conversion checks and returns
+the first `Diagnostic` or None. Its RFC 6901 pointer locates the nearest resource,
+scope, metric or data-point container, including array indices. `process_otlp`
+retains `StitchError::Invalid` and prefixes its message with the same location.
+Run `moon run --target wasm cli -- check input.json checkpoint.json` as a read-only
+CI gate. Valid input prints a JSON report and exits 0. Semantic errors print the
+diagnostic report and exit 2. JSON syntax and file errors use stderr and exit 2.
+The command checks the supplied state without publishing a converted receipt.
+
 ## Roadmap
 
 Exponential histograms,

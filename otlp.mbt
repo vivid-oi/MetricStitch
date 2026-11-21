@@ -69,42 +69,56 @@ fn metadata(value : Json, scope~ : Bool) -> Json raise StitchError {
 /// Convert the documented OTLP/JSON Int64/Double monotonic-Sum profile atomically.
 /// Unsupported fields or kinds raise instead of being dropped. Input Json is
 /// never mutated. Identity includes schema URLs and metric description.
-pub fn process_otlp(
+fn process_otlp_impl(
   state : State,
   request : Json,
+  location : Ref[String],
 ) -> OtlpStep raise StitchError {
   let root = fields(request, ["resourceMetrics"], "request")
+  location.val = "/resourceMetrics"
   let resources = array(required(root, "resourceMetrics"), "resourceMetrics")
   let output = []
   let mut current = state
   let mut duplicates = 0
-  for resource in resources {
+  for ri, resource in resources {
+    let resource_path = "/resourceMetrics/" + ri.to_string()
+    location.val = resource_path
     let r = fields(
       resource,
       ["resource", "scopeMetrics", "schemaUrl"],
       "resourceMetrics[]",
     )
+    location.val = resource_path + "/resource"
     let resource_id = metadata(
       r.get("resource").unwrap_or(Json::empty_object()),
       scope=false,
     )
+    location.val = resource_path + "/schemaUrl"
     let rschema = text(
       r.get("schemaUrl").unwrap_or(Json("")),
       "resource schemaUrl",
     )
     let scopes = []
-    for scope in array(required(r, "scopeMetrics"), "scopeMetrics") {
+    location.val = resource_path + "/scopeMetrics"
+    for si, scope in array(required(r, "scopeMetrics"), "scopeMetrics") {
+      let scope_path = resource_path + "/scopeMetrics/" + si.to_string()
+      location.val = scope_path
       let s = fields(scope, ["scope", "metrics", "schemaUrl"], "scopeMetrics[]")
+      location.val = scope_path + "/scope"
       let scope_id = metadata(
         s.get("scope").unwrap_or(Json::empty_object()),
         scope=true,
       )
+      location.val = scope_path + "/schemaUrl"
       let sschema = text(
         s.get("schemaUrl").unwrap_or(Json("")),
         "scope schemaUrl",
       )
       let metrics = []
-      for metric in array(required(s, "metrics"), "metrics") {
+      location.val = scope_path + "/metrics"
+      for mi, metric in array(required(s, "metrics"), "metrics") {
+        let metric_path = scope_path + "/metrics/" + mi.to_string()
+        location.val = metric_path
         let m = fields(
           metric,
           ["name", "description", "unit", "sum", "histogram"],
@@ -124,6 +138,7 @@ pub fn process_otlp(
           m.get("description").unwrap_or(Json("")),
           "metric.description",
         )
+        location.val = metric_path + "/" + kind
         let sum = fields(
           required(m, kind),
           if is_histogram {
@@ -138,7 +153,10 @@ pub fn process_otlp(
           raise Invalid(name + ": expected DELTA histogram or monotonic Sum")
         }
         let points = []
-        for point in array(required(sum, "dataPoints"), "dataPoints") {
+        let points_path = metric_path + "/" + kind + "/dataPoints"
+        location.val = points_path
+        for pi, point in array(required(sum, "dataPoints"), "dataPoints") {
+          location.val = points_path + "/" + pi.to_string()
           let p = fields(
             point,
             if is_histogram {

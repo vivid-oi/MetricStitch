@@ -21,14 +21,17 @@ async fn read_json(path : String) -> Json {
 async fn execute() -> Unit {
   let args = @env.args()
   let to_file = args.length() > 1 && args[1] == "apply-to"
+  let checking = args.length() > 1 && args[1] == "check"
   let valid = if to_file {
     args.length() == 4 || args.length() == 5
+  } else if checking {
+    args.length() == 3 || args.length() == 4
   } else {
     args.length() == 2 || args.length() == 3
   }
   if !valid {
     fail(
-      "usage: metricstitch INPUT.json [CHECKPOINT.json] | apply-to INPUT.json OUTPUT.json [PREVIOUS_RECEIPT.json]",
+      "usage: metricstitch INPUT.json [CHECKPOINT.json] | check INPUT.json [CHECKPOINT.json] | apply-to INPUT.json OUTPUT.json [PREVIOUS_RECEIPT.json]",
     )
   }
   let state = if to_file && args.length() == 5 {
@@ -50,13 +53,35 @@ async fn execute() -> Unit {
       )
     }
     @metricstitch.State::restore(checkpoint)
-  } else if !to_file && args.length() == 3 {
+  } else if checking && args.length() == 4 {
+    @metricstitch.State::restore(read_json(args[3]))
+  } else if !to_file && !checking && args.length() == 3 {
     @metricstitch.State::restore(read_json(args[2]))
   } else {
     @metricstitch.State::new()
   }
-  let input = args[if to_file { 2 } else { 1 }]
-  let result = @metricstitch.process_otlp(state, read_json(input))
+  let input = args[if to_file || checking { 2 } else { 1 }]
+  let request = read_json(input)
+  if checking {
+    let diagnostic = @metricstitch.validate_otlp(state, request)
+    let report : Json = match diagnostic {
+      None => { "valid": true, "diagnostic": null }
+      Some(d) =>
+        {
+          "valid": false,
+          "diagnostic": {
+            "pointer": Json(d.pointer),
+            "message": Json(d.message),
+          },
+        }
+    }
+    @stdio.stdout.write(report.stringify() + "\n")
+    if diagnostic is Some(_) {
+      exit_process(2)
+    }
+    return
+  }
+  let result = @metricstitch.process_otlp(state, request)
   let receipt : Json = {
     "checkpoint": result.state.checkpoint(),
     "request": result.request,

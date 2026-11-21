@@ -31,6 +31,8 @@ async fn main {
   @fs.write_file(input[:],source.stringify())
   let first = @shell.Cmd(moon,prefix + [input]).output()
   if first.exit_code() != 0 { fail(first.stderr()) }
+  let checked = @shell.Cmd(moon,prefix + ["check",input]).output()
+  if checked.exit_code() != 0 || !checked.stdout().contains("\"valid\":true") { fail("read-only check rejected valid input") }
   let installed = @shell.Cmd(moon,prefix + ["apply-to",input,receipt]).output()
   if installed.exit_code() != 0 || !installed.stdout().is_empty() || @fs.read_file(receipt[:]).text() != first.stdout() { fail("receipt publication failed") }
   let overwritten = @shell.Cmd(moon,prefix + ["apply-to",input,receipt]).output()
@@ -61,6 +63,8 @@ async fn main {
   if switched.exit_code() != 2 || !switched.stdout().is_empty() { fail("numeric kind switch was accepted") }
   @fs.write_file(input[:],"{\"resourceMetrics\":[],\"unknown\":true}")
   let bad = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
+  let checked_bad = @shell.Cmd(moon,prefix + ["check",input,checkpoint]).output()
+  if checked_bad.exit_code() != 2 || !checked_bad.stdout().contains("\"valid\":false") { fail("read-only gate accepted invalid input") }
   if bad.exit_code() != 2 || !bad.stdout().is_empty() || @fs.read_file(checkpoint[:]).text() != saved.stringify() { fail("rejected input damaged a checkpoint") }
   let refused_file = dir + "/refused.json"
   let refused = @shell.Cmd(moon,prefix + ["apply-to",input,refused_file,receipt]).output()

@@ -20,7 +20,8 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
-  let to_file = args.length() > 1 && args[1] == "apply-to"
+  let sequence = args.length() > 1 && args[1] == "replay-to"
+  let to_file = args.length() > 1 && (args[1] == "apply-to" || sequence)
   let checking = args.length() > 1 && args[1] == "check"
   let valid = if to_file {
     args.length() == 4 || args.length() == 5
@@ -31,7 +32,7 @@ async fn execute() -> Unit {
   }
   if !valid {
     fail(
-      "usage: metricstitch INPUT.json [CHECKPOINT.json] | check INPUT.json [CHECKPOINT.json] | apply-to INPUT.json OUTPUT.json [PREVIOUS_RECEIPT.json]",
+      "usage: metricstitch INPUT.json [CHECKPOINT.json] | check INPUT.json [CHECKPOINT.json] | apply-to INPUT.json OUTPUT.json [PREVIOUS_RECEIPT.json] | replay-to SEQUENCE.json OUTPUT.json [PREVIOUS_RECEIPT.json]",
     )
   }
   let state = if to_file && args.length() == 5 {
@@ -81,7 +82,16 @@ async fn execute() -> Unit {
     }
     return
   }
-  let result = @metricstitch.process_otlp(state, request)
+  let result = if sequence {
+    guard request is Object(obj) &&
+      obj.length() == 1 &&
+      request is { "requests": Array(requests), .. } else {
+      fail("sequence file must contain exactly a requests array")
+    }
+    @metricstitch.process_sequence(state, requests)
+  } else {
+    @metricstitch.process_otlp(state, request)
+  }
   let receipt : Json = {
     "checkpoint": result.state.checkpoint(),
     "request": result.request,
@@ -110,6 +120,10 @@ fn exit_process(code : Int32) -> Unit = "moonbitlang/async" "runtime/exit"
 ///|
 async fn main {
   execute() catch {
+    @metricstitch.Invalid(message) => {
+      @stdio.stderr.write(message + "\n")
+      exit_process(2)
+    }
     error => {
       @stdio.stderr.write(error.to_string() + "\n")
       exit_process(2)

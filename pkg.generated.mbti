@@ -10,6 +10,8 @@ pub fn parse_input(String) -> @json.Json raise StitchError
 
 pub fn process_otlp(State, @json.Json) -> OtlpStep raise StitchError
 
+pub fn process_sequence(State, Array[@json.Json]) -> OtlpStep raise StitchError
+
 pub fn validate_otlp(State, @json.Json) -> Diagnostic?
 
 // Errors

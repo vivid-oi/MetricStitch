@@ -28,6 +28,7 @@ async fn main {
   let input = dir + "/input.json"
   let checkpoint = dir + "/checkpoint.json"
   let receipt = dir + "/first receipt.json"
+  let first_request = @json.parse(source.stringify())
   @fs.write_file(input[:],source.stringify())
   let first = @shell.Cmd(moon,prefix + [input]).output()
   if first.exit_code() != 0 { fail(first.stderr()) }
@@ -51,6 +52,22 @@ async fn main {
   @fs.write_file(input[:],source.stringify())
   let second = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
   if second.exit_code() != 0 || !second.stdout().contains("\"asInt\":\"12\"") { fail("restored sum is wrong: " + second.stderr()) }
+  let second_request = @json.parse(source.stringify())
+  let sequence_input = dir + "/sequence.json"
+  let sequence_output = dir + "/sequence-receipt.json"
+  let sequence : Json = {"requests":[first_request,first_request,second_request]}
+  @fs.write_file(sequence_input[:],sequence.stringify())
+  @shell.Cmd(moon,prefix + ["replay-to",sequence_input,sequence_output]).run()
+  guard @json.parse(@fs.read_file(sequence_output[:]).text()) is {"checkpoint":sequence_state,"duplicates":Number(1.0,..),..} && @json.parse(second.stdout()) is {"checkpoint":second_state,..} else { fail("sequence receipt") }
+  if sequence_state != second_state { fail("sequence and sequential states differ") }
+  let sequence_resume = dir + "/sequence-resume.json"
+  @shell.Cmd(moon,prefix + ["replay-to",sequence_input,sequence_resume,receipt]).run()
+  guard @json.parse(@fs.read_file(sequence_resume[:]).text()) is {"checkpoint":resumed_state,..} else { fail("sequence resume receipt") }
+  if resumed_state != second_state { fail("sequence resume lost state") }
+  @fs.write_file(sequence_input[:],"{\"requests\":[" + first_request.stringify() + ",{\"unknown\":true}]}")
+  let failed_sequence = dir + "/failed-sequence.json"
+  let late_failure = @shell.Cmd(moon,prefix + ["replay-to",sequence_input,failed_sequence]).output()
+  if late_failure.exit_code() != 2 || !late_failure.stderr().contains("/requests/1") || @fs.exists(failed_sequence[:]) { fail("late sequence refusal failed: " + late_failure.exit_code().to_string() + " " + late_failure.stderr()) }
   let next_receipt = dir + "/next receipt.json"
   let resumed_file = @shell.Cmd(moon,prefix + ["apply-to",input,next_receipt,receipt]).output()
   if resumed_file.exit_code() != 0 || @fs.read_file(next_receipt[:]).text() != second.stdout() { fail("whole-receipt resume failed") }

@@ -120,6 +120,21 @@ CI gate. Valid input prints a JSON report and exits 0. Semantic errors print the
 diagnostic report and exit 2. JSON syntax and file errors use stderr and exit 2.
 The command checks the supplied state without publishing a converted receipt.
 
+## Recorded batch sequences
+
+`process_sequence(state, requests)` converts up to 1024 standard OTLP requests in
+order as one transaction. The result is a standard request retaining all emitted
+ResourceMetrics groups in order, a final checkpoint and total duplicate count.
+It does not coalesce groups. Failures identify `/requests/N` followed by the
+indexed input location. No partial state is returned.
+
+For offline recordings, write `{"requests":[REQUEST_1,REQUEST_2]}` to sequence.json
+and run `moon run --target wasm cli -- replay-to sequence.json receipt.json`.
+An optional last argument accepts a previous receipt. The same input/output
+budgets, exclusive file publication and error cleanup as apply-to are used.
+The documented replay compares this workflow with sequential execution, including
+retries, restored state and a failed final request that publishes no receipt.
+
 ## Roadmap
 
 Exponential histograms,

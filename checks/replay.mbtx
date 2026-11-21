@@ -71,5 +71,19 @@ async fn main {
   for name in @fs.readdir(dir[:]) {
     if name.has_suffix(".pending") { fail("failed publication left a temporary receipt") }
   }
+  let histogram_source = @json.parse(@fs.read_file("examples/upstream-metrics.json").text())
+  guard histogram_source is {"resourceMetrics":[{"scopeMetrics":[Object(hscope)],..}],..} && hscope.get("metrics") is Some(Array([_,_,Object(hmetric),..])) && hmetric.get("histogram") is Some({"dataPoints":[Object(hpoint)],..}) else { fail("missing upstream histogram") }
+  hscope["metrics"] = Json::array([Json::object(hmetric)])
+  hpoint["startTimeUnixNano"] = Json("1544712660000000000")
+  @fs.write_file(input[:],histogram_source.stringify())
+  let hist_receipt = dir + "/histogram.json"
+  @shell.Cmd(moon,prefix + ["apply-to",input,hist_receipt]).run()
+  hpoint["startTimeUnixNano"] = Json("1544712660300000000")
+  hpoint["timeUnixNano"] = Json("1544712660600000000")
+  @fs.write_file(input[:],histogram_source.stringify())
+  let hist_next = dir + "/histogram-next.json"
+  @shell.Cmd(moon,prefix + ["apply-to",input,hist_next,hist_receipt]).run()
+  let hist_output = @fs.read_file(hist_next[:]).text()
+  if !hist_output.contains("\"bucketCounts\":[\"2\",\"2\"]") || !hist_output.contains("\"count\":\"4\"") { fail("histogram replay lost samples") }
   println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
 }

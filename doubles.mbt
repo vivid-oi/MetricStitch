@@ -71,7 +71,8 @@ pub fn State::apply_doubles(
       raise Invalid("expected bounded series and positive increasing interval")
     }
     ignore(finite_nonnegative(Json(sample.value)))
-    if self.records.any(r => r.last.series == sample.series) {
+    if self.records.any(r => r.last.series == sample.series) ||
+      self.histograms.any(r => r.last_hist.series == sample.series) {
       raise Invalid("series changed numeric kind")
     }
     let mut index = -1
@@ -82,7 +83,8 @@ pub fn State::apply_doubles(
       }
     }
     let next : DoubleRecord = if index < 0 {
-      if records.length() + self.records.length() == self.limit {
+      if records.length() + self.records.length() + self.histograms.length() ==
+        self.limit {
         raise Invalid("series limit exceeded")
       }
       { last: sample, origin: sample.start, total: sample.value, }
@@ -109,7 +111,12 @@ pub fn State::apply_doubles(
     points.push({ ..sample, start: next.origin, value: next.total, })
   }
   {
-    state: { records: self.records, doubles: records, limit: self.limit, },
+    state: {
+      records: self.records,
+      doubles: records,
+      histograms: self.histograms,
+      limit: self.limit,
+    },
     points,
     duplicates,
   }
@@ -161,5 +168,5 @@ fn restore_doubles(value : Json) -> State raise StitchError {
     }
     doubles.push({ last, origin, total, })
   }
-  { records: base.records, doubles, limit: base.limit, }
+  { records: base.records, doubles, histograms: [], limit: base.limit, }
 }

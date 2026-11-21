@@ -87,9 +87,23 @@ The core supports wasm, wasm-gc, js and native. The async CLI supports wasm and
 native. CI runs core tests on the portable targets and native Linux/macOS/Windows,
 and executes the documented replay on Wasm and each native OS.
 
+## Explicit histograms
+
+Explicit-bucket Delta histograms are supported by `State::apply_histograms` and
+the OTLP workflow. Counts and population are nonnegative Int64 values, with
+checked addition, at most 1024 finite increasing bounds, and exactly bounds+1
+buckets. Population must equal the bucket total. Arrays are copied at both API
+boundaries. Sum is optional and uses finite Double addition. Min/max are supplied
+together or omitted together, and empty populations omit extrema. Layout and sum
+availability must remain constant. Nonempty intervals must agree on extrema
+availability. Unsupported changes are refused. Histogram states use checkpoint
+version 3. Versions 1 and 2 remain readable and retain their existing output.
+The replay also exercises the pinned official histogram across two intervals
+and a saved receipt. Its times are edited to form contiguous positive intervals.
+
 ## Roadmap
 
-Explicit and exponential histograms,
+Exponential histograms,
 out-of-order buffering, network receivers and multi-writer coordination are
 planned capabilities. The current profile requires contiguous intervals. It
 remembers only the most recent delta per series and does not offer unbounded

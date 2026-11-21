@@ -28,6 +28,7 @@ priv struct Record {
 pub struct State {
   priv records : Array[Record]
   priv doubles : Array[DoubleRecord]
+  priv histograms : Array[HistogramRecord]
   priv limit : Int32
 }
 
@@ -44,7 +45,7 @@ pub fn State::new(max_series~ : Int32 = 1024) -> State raise StitchError {
   if max_series <= 0 || max_series > 100000 {
     raise Invalid("max_series must be in 1..100000")
   }
-  { records: [], doubles: [], limit: max_series, }
+  { records: [], doubles: [], histograms: [], limit: max_series, }
 }
 
 ///|
@@ -72,7 +73,8 @@ pub fn State::apply(
   let points = []
   let mut duplicates = 0
   for sample in batch {
-    if self.doubles.any(r => r.last.series == sample.series) {
+    if self.doubles.any(r => r.last.series == sample.series) ||
+      self.histograms.any(r => r.last_hist.series == sample.series) {
       raise Invalid("series changed numeric kind")
     }
     if sample.series.is_empty() ||
@@ -92,7 +94,8 @@ pub fn State::apply(
       }
     }
     let next : Record = if index < 0 {
-      if records.length() + self.doubles.length() == self.limit {
+      if records.length() + self.doubles.length() + self.histograms.length() ==
+        self.limit {
         raise Invalid("series limit exceeded")
       }
       { last: sample, origin: sample.start, total: sample.value, }
@@ -118,7 +121,12 @@ pub fn State::apply(
     points.push({ ..sample, start: next.origin, value: next.total, })
   }
   {
-    state: { records, doubles: self.doubles, limit: self.limit, },
+    state: {
+      records,
+      doubles: self.doubles,
+      histograms: self.histograms,
+      limit: self.limit,
+    },
     points,
     duplicates,
   }

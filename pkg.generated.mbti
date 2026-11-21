@@ -32,6 +32,27 @@ pub(all) struct DoubleStep {
   duplicates : Int32
 }
 
+#derive(Eq)
+pub(all) struct HistogramSample {
+  series : String
+  start : Int64
+  end : Int64
+  bounds : Array[Double]
+  counts : Array[Int64]
+  count : Int64
+  sum : Double?
+  min : Double?
+  max : Double?
+}
+pub fn HistogramSample::equal(Self, Self) -> Bool
+pub fn HistogramSample::not_equal(Self, Self) -> Bool
+
+pub(all) struct HistogramStep {
+  state : State
+  points : Array[HistogramSample]
+  duplicates : Int32
+}
+
 pub(all) struct OtlpStep {
   state : State
   request : @json.Json
@@ -53,6 +74,7 @@ pub struct State {
 }
 pub fn State::apply(Self, Array[Sample]) -> Step raise StitchError
 pub fn State::apply_doubles(Self, Array[DoubleSample]) -> DoubleStep raise StitchError
+pub fn State::apply_histograms(Self, Array[HistogramSample]) -> HistogramStep raise StitchError
 pub fn State::checkpoint(Self) -> @json.Json
 pub fn State::new(max_series? : Int32) -> Self raise StitchError
 pub fn State::restore(@json.Json) -> Self raise StitchError

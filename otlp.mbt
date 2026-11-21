@@ -105,7 +105,16 @@ pub fn process_otlp(
       )
       let metrics = []
       for metric in array(required(s, "metrics"), "metrics") {
-        let m = fields(metric, ["name", "description", "unit", "sum"], "metric")
+        let m = fields(
+          metric,
+          ["name", "description", "unit", "sum", "histogram"],
+          "metric",
+        )
+        if m.contains("sum") == m.contains("histogram") {
+          raise Invalid("metric requires exactly one supported kind")
+        }
+        let is_histogram = m.contains("histogram")
+        let kind = if is_histogram { "histogram" } else { "sum" }
         let name = text(required(m, "name"), "metric.name")
         if name.is_empty() {
           raise Invalid("empty metric name")
@@ -116,22 +125,33 @@ pub fn process_otlp(
           "metric.description",
         )
         let sum = fields(
-          required(m, "sum"),
-          ["dataPoints", "aggregationTemporality", "isMonotonic"],
-          name + ".sum",
+          required(m, kind),
+          if is_histogram {
+            ["dataPoints", "aggregationTemporality"]
+          } else {
+            ["dataPoints", "aggregationTemporality", "isMonotonic"]
+          },
+          name + "." + kind,
         )
         if required(sum, "aggregationTemporality") != Json(1) ||
-          required(sum, "isMonotonic") != Json(true) {
-          raise Invalid(name + ": expected DELTA monotonic Sum")
+          (!is_histogram && required(sum, "isMonotonic") != Json(true)) {
+          raise Invalid(name + ": expected DELTA histogram or monotonic Sum")
         }
         let points = []
         for point in array(required(sum, "dataPoints"), "dataPoints") {
           let p = fields(
             point,
-            [
-              "attributes", "startTimeUnixNano", "timeUnixNano", "asInt", "flags",
-              "exemplars", "asDouble",
-            ],
+            if is_histogram {
+              [
+                "attributes", "startTimeUnixNano", "timeUnixNano", "count", "sum",
+                "min", "max", "explicitBounds", "bucketCounts", "flags", "exemplars",
+              ]
+            } else {
+              [
+                "attributes", "startTimeUnixNano", "timeUnixNano", "asInt", "flags",
+                "exemplars", "asDouble",
+              ]
+            },
             name + ".dataPoint",
           )
           if p.get("flags").unwrap_or(Json(0)) != Json(0) ||
@@ -154,10 +174,15 @@ pub fn process_otlp(
             "startTimeUnixNano",
           )
           let end = decimal(required(p, "timeUnixNano"), "timeUnixNano")
-          if p.contains("asInt") == p.contains("asDouble") {
+          if !is_histogram && p.contains("asInt") == p.contains("asDouble") {
             raise Invalid("point requires exactly one numeric value")
           }
-          let converted = if p.contains("asInt") {
+          let converted = if is_histogram {
+            let step = current.apply_histograms([read_histogram(identity, p)])
+            current = step.state
+            duplicates += step.duplicates
+            step.points.map(p => (p.start, histogram_json(p)))
+          } else if p.contains("asInt") {
             let sample : Sample = {
               series: identity,
               start,
@@ -183,7 +208,18 @@ pub fn process_otlp(
           for (origin, total) in converted {
             let fields = p.copy()
             fields["startTimeUnixNano"] = Json(origin.to_string())
-            fields[if p.contains("asInt") { "asInt" } else { "asDouble" }] = total
+            if is_histogram {
+              guard total is Object(encoded) else {
+                abort("histogram serialization")
+              }
+              for key, value in encoded {
+                if key != "series" {
+                  fields[key] = value
+                }
+              }
+            } else {
+              fields[if p.contains("asInt") { "asInt" } else { "asDouble" }] = total
+            }
             points.push(Json::object(fields))
           }
         }
@@ -191,7 +227,7 @@ pub fn process_otlp(
         sum_out["dataPoints"] = Json::array(points)
         sum_out["aggregationTemporality"] = Json(2)
         let metric_out = m.copy()
-        metric_out["sum"] = Json::object(sum_out)
+        metric_out[kind] = Json::object(sum_out)
         metrics.push(Json::object(metric_out))
       }
       let scope_out = s.copy()

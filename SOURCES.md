@@ -11,6 +11,8 @@
   with asInt, and sets explicit contiguous intervals. A separate run exercises
   asDouble and refusal of a numeric-kind switch. Those edits are documented
   synthetic test inputs. The production converter rejects the original example.
+  The same fixture's explicit histogram is replayed twice with contiguous edited
+  timestamps. Its buckets, count, sum and extrema retain the upstream values.
 * OpenTelemetry metrics data model is the behavioral reference, not copied code.
   https://opentelemetry.io/docs/specs/otel/metrics/data-model/
 * `moonbitlang/async` 0.22.5 provides CLI filesystem/process/runtime adapters,

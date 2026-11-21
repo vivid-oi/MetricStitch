@@ -135,6 +135,18 @@ budgets, exclusive file publication and error cleanup as apply-to are used.
 The documented replay compares this workflow with sequential execution, including
 retries, restored state and a failed final request that publishes no receipt.
 
+## State lifecycle
+
+`State::summary()` reports capacity, kind counts and oldest/newest last-point end
+times as exact decimal strings. `State::partition_before(cutoff)` explicitly
+partitions state at last.end < cutoff. Its `retained` and `archived` states keep
+the original capacity and can both be checkpointed and restored. The original
+state remains reusable. Persist the archive before adopting retained. Delayed
+points can continue through archived. Reintroducing an archived series into
+retained begins a new cumulative origin and loses its previous retry window.
+This operation is explicit, with no automatic eviction or system-clock access.
+Run `moon run examples/archive` to exercise archival and retry recovery.
+
 ## Roadmap
 
 Exponential histograms,

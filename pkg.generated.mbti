@@ -68,6 +68,11 @@ pub(all) struct OtlpStep {
   duplicates : Int32
 }
 
+pub(all) struct Partition {
+  retained : State
+  archived : State
+}
+
 #derive(Eq)
 pub(all) struct Sample {
   series : String
@@ -86,7 +91,9 @@ pub fn State::apply_doubles(Self, Array[DoubleSample]) -> DoubleStep raise Stitc
 pub fn State::apply_histograms(Self, Array[HistogramSample]) -> HistogramStep raise StitchError
 pub fn State::checkpoint(Self) -> @json.Json
 pub fn State::new(max_series? : Int32) -> Self raise StitchError
+pub fn State::partition_before(Self, Int64) -> Partition raise StitchError
 pub fn State::restore(@json.Json) -> Self raise StitchError
+pub fn State::summary(Self) -> @json.Json
 
 pub(all) struct Step {
   state : State

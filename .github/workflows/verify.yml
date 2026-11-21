@@ -24,6 +24,7 @@ jobs:
       - run: moon check --target ${{ matrix.target }} --deny-warn
       - run: moon test --target ${{ matrix.target }} --deny-warn
       - run: moon run --target ${{ matrix.target }} examples/counter
+      - run: moon run --target ${{ matrix.target }} examples/archive
       - if: matrix.target == 'wasm'
         run: moon run checks/replay.mbtx -- moon wasm
   native:
@@ -42,4 +43,5 @@ jobs:
       - run: moon update
       - run: moon test --target native --deny-warn
       - run: moon run --target native examples/counter
+      - run: moon run --target native examples/archive
       - run: moon run checks/replay.mbtx -- moon native

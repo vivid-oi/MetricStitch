@@ -16,6 +16,22 @@ pub suberror StitchError {
 }
 
 // Types and methods
+#derive(Eq)
+pub(all) struct DoubleSample {
+  series : String
+  start : Int64
+  end : Int64
+  value : Double
+}
+pub fn DoubleSample::equal(Self, Self) -> Bool
+pub fn DoubleSample::not_equal(Self, Self) -> Bool
+
+pub(all) struct DoubleStep {
+  state : State
+  points : Array[DoubleSample]
+  duplicates : Int32
+}
+
 pub(all) struct OtlpStep {
   state : State
   request : @json.Json
@@ -36,6 +52,7 @@ pub struct State {
   // private fields
 }
 pub fn State::apply(Self, Array[Sample]) -> Step raise StitchError
+pub fn State::apply_doubles(Self, Array[DoubleSample]) -> DoubleStep raise StitchError
 pub fn State::checkpoint(Self) -> @json.Json
 pub fn State::new(max_series? : Int32) -> Self raise StitchError
 pub fn State::restore(@json.Json) -> Self raise StitchError

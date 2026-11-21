@@ -3,7 +3,7 @@
 A portable, bounded delta-to-cumulative processing library for MoonBit.
 Its consumers are telemetry gateways and offline OTLP replay tools.
 
-The initial core accumulates nonnegative Int64 deltas with explicit interval
+The core accumulates nonnegative Int64 and finite Double deltas with explicit interval
 continuity, last-point retry detection, checked overflow and atomic batches.
 State is immutable. Keep the returned state only after accepting the output.
 Older retries, gaps and overlaps raise `StitchError` and preserve the old state.
@@ -26,8 +26,14 @@ and returns a new state, cumulative request and duplicate count. The input JSON
 and original state remain intact on failure. `parse_input(text)` rejects duplicate
 decoded JSON object keys and limits nesting to 64 and text to 4M code units.
 
-The supported profile is DELTA monotonic Sum with nonnegative `asInt` decimal
-strings and positive strictly increasing nanosecond timestamps. Attributes support
+The supported profile is DELTA monotonic Sum with exactly one nonnegative `asInt`
+decimal string or finite nonnegative `asDouble` number and positive strictly
+increasing nanosecond timestamps. Double accumulation uses ordered IEEE-754
+addition with overflow rejection, so rounding follows Double arithmetic.
+`State::apply_doubles` exposes the typed floating-point entry point. A series
+cannot switch between Int64 and Double. The series budget is shared by both.
+Pure-integer checkpoints retain version 1, while states with floating-point
+series use version 2. Both versions can be restored. Attributes support
 strings, booleans, signed Int64 decimal strings, finite numeric doubles, base64
 bytes, arrays and key-value lists. Each attribute set has a 4096-value budget and
 16-level nesting limit. Attributes and nested key-value lists require unique keys.
@@ -71,7 +77,7 @@ and executes the documented replay on Wasm and each native OS.
 
 ## Roadmap
 
-Double sums, explicit and exponential histograms,
+Explicit and exponential histograms,
 out-of-order buffering, network receivers and multi-writer coordination are
 planned capabilities. The current profile requires contiguous intervals. It
 remembers only the most recent delta per series and does not offer unbounded

@@ -66,7 +66,7 @@ fn metadata(value : Json, scope~ : Bool) -> Json raise StitchError {
 }
 
 ///|
-/// Convert the documented OTLP/JSON Int64 monotonic-Sum profile atomically.
+/// Convert the documented OTLP/JSON Int64/Double monotonic-Sum profile atomically.
 /// Unsupported fields or kinds raise instead of being dropped. Input Json is
 /// never mutated. Identity includes schema URLs and metric description.
 pub fn process_otlp(
@@ -130,7 +130,7 @@ pub fn process_otlp(
             point,
             [
               "attributes", "startTimeUnixNano", "timeUnixNano", "asInt", "flags",
-              "exemplars",
+              "exemplars", "asDouble",
             ],
             name + ".dataPoint",
           )
@@ -149,22 +149,41 @@ pub fn process_otlp(
             Json(description),
             attrs,
           ]).stringify()
-          let sample : Sample = {
-            series: identity,
-            start: decimal(
-              required(p, "startTimeUnixNano"),
-              "startTimeUnixNano",
-            ),
-            end: decimal(required(p, "timeUnixNano"), "timeUnixNano"),
-            value: decimal(required(p, "asInt"), "asInt"),
+          let start = decimal(
+            required(p, "startTimeUnixNano"),
+            "startTimeUnixNano",
+          )
+          let end = decimal(required(p, "timeUnixNano"), "timeUnixNano")
+          if p.contains("asInt") == p.contains("asDouble") {
+            raise Invalid("point requires exactly one numeric value")
           }
-          let step = current.apply([sample])
-          current = step.state
-          duplicates += step.duplicates
-          for accumulated in step.points {
+          let converted = if p.contains("asInt") {
+            let sample : Sample = {
+              series: identity,
+              start,
+              end,
+              value: decimal(required(p, "asInt"), "asInt"),
+            }
+            let step = current.apply([sample])
+            current = step.state
+            duplicates += step.duplicates
+            step.points.map(p => (p.start, Json(p.value.to_string())))
+          } else {
+            let sample : DoubleSample = {
+              series: identity,
+              start,
+              end,
+              value: finite_nonnegative(required(p, "asDouble")),
+            }
+            let step = current.apply_doubles([sample])
+            current = step.state
+            duplicates += step.duplicates
+            step.points.map(p => (p.start, Json(p.value)))
+          }
+          for (origin, total) in converted {
             let fields = p.copy()
-            fields["startTimeUnixNano"] = Json(accumulated.start.to_string())
-            fields["asInt"] = Json(accumulated.value.to_string())
+            fields["startTimeUnixNano"] = Json(origin.to_string())
+            fields[if p.contains("asInt") { "asInt" } else { "asDouble" }] = total
             points.push(Json::object(fields))
           }
         }

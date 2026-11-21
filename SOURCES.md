@@ -8,7 +8,8 @@
   License Apache-2.0, included in `examples/UPSTREAM-LICENSE`.
 * `checks/replay.mbtx` derives an Int64 monotonic-Sum profile from the official
   example at runtime. It removes the other metric examples, replaces asDouble
-  with asInt, and sets explicit contiguous intervals. Those edits are documented
+  with asInt, and sets explicit contiguous intervals. A separate run exercises
+  asDouble and refusal of a numeric-kind switch. Those edits are documented
   synthetic test inputs. The production converter rejects the original example.
 * OpenTelemetry metrics data model is the behavioral reference, not copied code.
   https://opentelemetry.io/docs/specs/otel/metrics/data-model/

@@ -39,7 +39,7 @@ fn decimal(value : Json, path : String) -> Int64 raise StitchError {
 pub fn State::checkpoint(self : State) -> Json {
   let records = self.records.copy()
   records.sort_by((a, b) => a.last.series.compare(b.last.series))
-  {
+  let base : Json = {
     "version": 1,
     "max_series": Json(self.limit.to_string()),
     "records": Json::array(
@@ -53,12 +53,33 @@ pub fn State::checkpoint(self : State) -> Json {
       }),
     ),
   }
+  if self.doubles.is_empty() {
+    return base
+  }
+  let doubles = self.doubles.copy()
+  doubles.sort_by((a, b) => a.last.series.compare(b.last.series))
+  guard base is Object(obj) else { abort("checkpoint construction") }
+  obj["version"] = Json(2)
+  obj["doubles"] = Json::array(
+    doubles.map(r => {
+      "series": Json(r.last.series),
+      "start": Json(r.last.start.to_string()),
+      "end": Json(r.last.end.to_string()),
+      "delta": Json(r.last.value),
+      "origin": Json(r.origin.to_string()),
+      "total": Json(r.total),
+    }),
+  )
+  base
 }
 
 ///|
 /// Validate a versioned checkpoint before constructing state. This checks
 /// structural consistency, not authenticity of externally modified totals.
 pub fn State::restore(value : Json) -> State raise StitchError {
+  if value is { "version": Number(2.0, ..), .. } {
+    return restore_doubles(value)
+  }
   let obj = fields(value, ["version", "max_series", "records"], "checkpoint")
   if required(obj, "version") != Json(1) {
     raise Invalid("unsupported checkpoint version")
@@ -74,7 +95,7 @@ pub fn State::restore(value : Json) -> State raise StitchError {
   if items.length() > state.limit {
     raise Invalid("checkpoint exceeds series limit")
   }
-  let records = []
+  let records : Array[Record] = []
   let seen : Map[String, Bool] = Map([])
   for item in items {
     let r = fields(
@@ -106,5 +127,5 @@ pub fn State::restore(value : Json) -> State raise StitchError {
     }
     records.push({ last, origin, total, })
   }
-  { records, limit: state.limit, }
+  { records, doubles: [], limit: state.limit, }
 }

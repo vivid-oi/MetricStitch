@@ -103,6 +103,14 @@ and a saved receipt. Its times are edited to form contiguous positive intervals.
 
 ## Validation
 
+Mixed requests may include Gauge metrics. Their finite signed Double or signed
+Int64 samples are validated and passed through unchanged. Gauge timestamps must
+be positive, and optional start times must not exceed the end. Gauge values do
+not accumulate, allocate series state or participate in retry suppression.
+Nonzero flags and nonempty exemplars are refused. A bad Gauge rejects the whole
+request, including earlier Sum or Histogram conversions. The replay verifies
+the official Counter/Gauge/Histogram examples together after adapting their times.
+
 `validate_otlp(state, request)` runs the complete conversion checks and returns
 the first `Diagnostic` or None. Its RFC 6901 pointer locates the nearest resource,
 scope, metric or data-point container, including array indices. `process_otlp`

@@ -89,5 +89,15 @@ async fn main {
   @shell.Cmd(moon,prefix + ["apply-to",input,hist_next,hist_receipt]).run()
   let hist_output = @fs.read_file(hist_next[:]).text()
   if !hist_output.contains("\"bucketCounts\":[\"2\",\"2\"]") || !hist_output.contains("\"count\":\"4\"") { fail("histogram replay lost samples") }
+  let mixed_source = @json.parse(@fs.read_file("examples/upstream-metrics.json").text())
+  guard mixed_source is {"resourceMetrics":[{"scopeMetrics":[Object(mscope)],..}],..} && mscope.get("metrics") is Some(Array([counter,gauge,histogram,..])) && counter is {"sum":{"dataPoints":[Object(cp)],..},..} && histogram is {"histogram":{"dataPoints":[Object(hp)],..},..} else { fail("missing mixed fixture") }
+  cp["startTimeUnixNano"] = Json("1544712660000000000")
+  hp["startTimeUnixNano"] = Json("1544712660000000000")
+  mscope["metrics"] = Json::array([counter,gauge,histogram])
+  @fs.write_file(input[:],mixed_source.stringify())
+  let mixed = @shell.Cmd(moon,prefix + [input]).output()
+  if mixed.exit_code() != 0 { fail(mixed.stderr()) }
+  guard @json.parse(mixed.stdout()) is {"request":{"resourceMetrics":[{"scopeMetrics":[{"metrics":Array(mixed_metrics),..}],..}],..},..} else { fail("mixed output") }
+  if mixed_metrics.length() != 3 || mixed_metrics[1] != gauge { fail("Gauge changed or disappeared") }
   println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
 }

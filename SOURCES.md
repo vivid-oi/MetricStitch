@@ -13,6 +13,8 @@
   synthetic test inputs. The production converter rejects the original example.
   The same fixture's explicit histogram is replayed twice with contiguous edited
   timestamps. Its buckets, count, sum and extrema retain the upstream values.
+  A mixed replay retains the official Counter, Gauge and Histogram, adapts the
+  two interval start times and verifies that Gauge content survives unchanged.
 * OpenTelemetry metrics data model is the behavioral reference, not copied code.
   https://opentelemetry.io/docs/specs/otel/metrics/data-model/
 * `moonbitlang/async` 0.22.5 provides CLI filesystem/process/runtime adapters,

@@ -121,14 +121,14 @@ fn process_otlp_impl(
         location.val = metric_path
         let m = fields(
           metric,
-          ["name", "description", "unit", "sum", "histogram"],
+          ["name", "description", "unit", "sum", "histogram", "gauge"],
           "metric",
         )
-        if m.contains("sum") == m.contains("histogram") {
+        let kinds = ["sum", "histogram", "gauge"].filter(k => m.contains(k))
+        guard kinds is [kind] else {
           raise Invalid("metric requires exactly one supported kind")
         }
-        let is_histogram = m.contains("histogram")
-        let kind = if is_histogram { "histogram" } else { "sum" }
+        let is_histogram = kind == "histogram"
         let name = text(required(m, "name"), "metric.name")
         if name.is_empty() {
           raise Invalid("empty metric name")
@@ -138,6 +138,11 @@ fn process_otlp_impl(
           m.get("description").unwrap_or(Json("")),
           "metric.description",
         )
+        if kind == "gauge" {
+          validate_gauge(required(m, "gauge"), location, metric_path + "/gauge")
+          metrics.push(metric)
+          continue
+        }
         location.val = metric_path + "/" + kind
         let sum = fields(
           required(m, kind),

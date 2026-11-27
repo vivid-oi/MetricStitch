@@ -3,6 +3,7 @@ priv enum SeriesSlot {
   IntSlot(Int32)
   DoubleSlot(Int32)
   HistogramSlot(Int32)
+  ExponentialSlot(Int32)
 }
 
 ///|
@@ -12,6 +13,7 @@ fn indexed_state(
   doubles : Array[DoubleRecord],
   histograms : Array[HistogramRecord],
   limit : Int32,
+  exponentials~ : Array[ExponentialRecord] = [],
 ) -> State {
   let index : Map[String, SeriesSlot] = Map([])
   for i, r in records {
@@ -23,7 +25,10 @@ fn indexed_state(
   for i, r in histograms {
     index[r.last_hist.series] = HistogramSlot(i)
   }
-  { records, doubles, histograms, limit, index, }
+  for i, r in exponentials {
+    index[r.last_exp.series] = ExponentialSlot(i)
+  }
+  { records, doubles, histograms, exponentials, limit, index, }
 }
 
 ///|
@@ -33,6 +38,7 @@ fn State::detached(self : State) -> State {
     records: self.records.copy(),
     doubles: self.doubles.copy(),
     histograms: self.histograms.copy(),
+    exponentials: self.exponentials.copy(),
     index: self.index.copy(),
     limit: self.limit,
   }

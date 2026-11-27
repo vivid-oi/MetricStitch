@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — source release candidate, 2026-11-27
+
+- Independent shared-profile differential checks against Collector Contrib 0.166.0.
+- Exponential histogram accumulation, scale alignment and bounded downscaling,
+  OTLP conversion/export, checkpoint version 4, lifecycle and typed reorder support.
+- `BufferedPoint::Exponential` is a new enum case; exhaustive matches must handle
+  it. Zero-threshold changes are explicitly unsupported and rejected.
+
 ## 0.2.0 — source release candidate, 2026-11-27
 
 - Added a pinned real Collector receiver/file-exporter integration check and a

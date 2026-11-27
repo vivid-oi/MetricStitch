@@ -146,5 +146,21 @@ async fn main {
   @shell.Cmd(moon,prefix + ["export",exact_receipt,exact_export]).run()
   if !@fs.read_file(exact_export[:]).text().contains("\"asInt\":\"9007199254740993\"") { fail("large Int64 changed during export") }
   @shell.Cmd(moon,["run","checks/protocol.mbtx","--",exact_export]).run()
+  let exp_source = @json.parse(@fs.read_file("examples/upstream-metrics.json").text())
+  guard exp_source is {"resourceMetrics":[{"scopeMetrics":[Object(exp_scope)],..}],..} && exp_scope.get("metrics") is Some(Array([_,_,_,Object(exp_metric)])) && exp_metric.get("exponentialHistogram") is Some({"dataPoints":[Object(exp_point)],..}) else { fail("missing official exponential fixture") }
+  exp_scope["metrics"] = Json::array([Json::object(exp_metric)])
+  exp_point["startTimeUnixNano"] = Json("1544712660000000000")
+  @fs.write_file(input[:],exp_source.stringify())
+  let exp_receipt = dir + "/exponential-receipt.json"
+  let exp_next = dir + "/exponential-next.json"
+  let exp_export = dir + "/exponential-export.json"
+  @shell.Cmd(moon,prefix + ["apply-to",input,exp_receipt]).run()
+  exp_point["startTimeUnixNano"] = Json("1544712660300000000")
+  exp_point["timeUnixNano"] = Json("1544712660600000000")
+  @fs.write_file(input[:],exp_source.stringify())
+  @shell.Cmd(moon,prefix + ["apply-to",input,exp_next,exp_receipt]).run()
+  @shell.Cmd(moon,prefix + ["export",exp_next,exp_export]).run()
+  if !@fs.read_file(exp_export[:]).text().contains("\"count\":\"6\"") { fail("exponential recovery failed") }
+  @shell.Cmd(moon,["run","checks/protocol.mbtx","--",exp_export]).run()
   println("OTLP fixture profile, retry and checkpoint recovery passed (" + target + ")")
 }

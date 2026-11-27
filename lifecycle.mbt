@@ -19,8 +19,11 @@ pub fn State::summary(self : State) -> Json {
   for r in self.histograms {
     ends.push(r.last_hist.end)
   }
+  for r in self.exponentials {
+    ends.push(r.last_exp.end)
+  }
   ends.sort()
-  {
+  let result : Json = {
     "series": Json(ends.length()),
     "capacity": Json(self.limit),
     "available": Json(self.limit - ends.length()),
@@ -36,6 +39,10 @@ pub fn State::summary(self : State) -> Json {
       None => null
     },
   }
+  if !self.exponentials.is_empty() && result is Object(obj) {
+    obj["exponential"] = Json(self.exponentials.length())
+  }
+  result
 }
 
 ///|
@@ -69,12 +76,14 @@ pub fn State::partition_before(
     self.doubles.filter(r => r.last.end >= cutoff),
     self.histograms.filter(r => r.last_hist.end >= cutoff),
     self.limit,
+    exponentials=self.exponentials.filter(r => r.last_exp.end >= cutoff),
   )
   let archived = indexed_state(
     self.records.filter(r => r.last.end < cutoff),
     self.doubles.filter(r => r.last.end < cutoff),
     self.histograms.filter(r => r.last_hist.end < cutoff),
     self.limit,
+    exponentials=self.exponentials.filter(r => r.last_exp.end < cutoff),
   )
   { retained, archived, }
 }

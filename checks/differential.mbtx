@@ -15,7 +15,7 @@ fn fixture(i : Int) -> Json {
   let start = (epoch + i.to_int64() * 1000000000L).to_string()
   let end = (epoch + (i + 1).to_int64() * 1000000000L).to_string()
   let metrics : Array[Json] = []
-  for kind in ["integer", "double", "histogram", "gauge"] {
+  for kind in ["integer", "double", "histogram", "gauge", "exponential"] {
     let points : Array[Json] = []
     for j in 0..<2 {
       let p : Map[String, Json] = {
@@ -26,6 +26,13 @@ fn fixture(i : Int) -> Json {
         "integer" => p["asInt"] = Json((if i == 0 { 9007199254740993L } else { ((i + j) % 7).to_int64() }).to_string())
         "double" => p["asDouble"] = Json(((i * 17 + j) % 13).to_double() * 0.25)
         "gauge" => p["asInt"] = Json((i - j - 10).to_string())
+        "exponential" => {
+          p["scale"] = Json(if i < 8 { 2 } else if i < 16 { 1 } else { 0 })
+          p["count"] = Json("8")
+          p["zeroCount"] = Json("1")
+          p["positive"] = { "offset": -3, "bucketCounts": ["1", "2", "1", "0"] }
+          p["negative"] = { "offset": -2, "bucketCounts": ["1", "2"] }
+        }
         _ => {
           let count = i % 3 + j + 2
           p["count"] = Json(count.to_string())
@@ -42,10 +49,36 @@ fn fixture(i : Int) -> Json {
     let data : Map[String, Json] = {"dataPoints":Json::array(points)}
     if kind != "gauge" { data["aggregationTemporality"] = Json(1) }
     if kind == "integer" || kind == "double" { data["isMonotonic"] = Json(true) }
-    metric[if kind == "histogram" || kind == "gauge" { kind } else { "sum" }] = Json::object(data)
+    metric[if kind == "exponential" { "exponentialHistogram" } else if kind == "histogram" || kind == "gauge" { kind } else { "sum" }] = Json::object(data)
     metrics.push(Json::object(metric))
   }
   {"resourceMetrics":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"metricstitch-differential"}}]},"scopeMetrics":[{"scope":{"name":"differential","version":"1"},"metrics":Json::array(metrics)}]}]}
+}
+
+// Dense exponential arrays may retain empty edge buckets in upstream. Compare
+// the identical bucket-index population, not those allocation-padding zeros.
+fn normalized(value : Json) -> Json {
+  match value {
+    Array(items) => Json::array(items.map(normalized))
+    Object(obj) => {
+      let copy : Map[String, Json] = Map([])
+      for key, child in obj { copy[key] = normalized(child) }
+      if obj.contains("zeroCount") && obj.contains("count") {
+        for key in ["positive", "negative"] {
+          let data = obj.get(key).unwrap_or(Json::empty_object())
+          let offset = if data is {"offset": Number(n, ..), ..} { n.to_int() } else { 0 }
+          let counts = if data is {"bucketCounts": Array(ns), ..} { ns } else { [] }
+          let mut lo = 0
+          let mut hi = counts.length()
+          while lo < hi && counts[lo] == Json("0") { lo += 1 }
+          while hi > lo && counts[hi - 1] == Json("0") { hi -= 1 }
+          copy[key] = { "offset": Json(if lo == hi { 0 } else { offset + lo }), "bucketCounts": Json::array(counts[lo:hi].to_owned()) }
+        }
+      }
+      Json::object(copy)
+    }
+    _ => value
+  }
 }
 
 async fn send(curl : String, port : String, file : String) -> Unit {
@@ -64,6 +97,10 @@ async fn main {
   if args.length() < 2 || args.length() > 4 { fail("usage: differential.mbtx CONTRIB_0.166.0 [MOON] [CURL]") }
   let moon = if args.length() > 2 { args[2] } else { "moon" }
   let curl = if args.length() > 3 { args[3] } else { "curl" }
+  let padded : Json = {"count":"1", "zeroCount":"0", "positive":{"offset":-2, "bucketCounts":["0","1","0"]}}
+  let compact : Json = {"count":"1", "zeroCount":"0", "positive":{"offset":-1, "bucketCounts":["1"]}}
+  let mutant : Json = {"count":"1", "zeroCount":"0", "positive":{"offset":-1, "bucketCounts":["2"]}}
+  if normalized(padded) != normalized(compact) || normalized(padded) == normalized(mutant) { fail("bucket comparison normalization is unsound") }
   let version = @shell.Cmd(args[1], ["--version"]).output()
   version.check()
   if !version.stdout().contains("0.166.0") { fail("expected Collector Contrib 0.166.0") }
@@ -118,8 +155,8 @@ async fn main {
     for i in 0..<32 {
       let expected : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(a[i]))
       let actual : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(b[i]))
-      if expected != actual { fail("semantic difference at interval " + i.to_string() + "\nreference=" + a[i] + "\ncandidate=" + b[i]) }
+      if normalized(expected.to_json()) != normalized(actual.to_json()) { fail("semantic difference at interval " + i.to_string() + "\nreference=" + a[i] + "\ncandidate=" + b[i]) }
     }
-    println("Differential check passed: 32 intervals, 256 points, Int64 > 2^53, Double, explicit Histogram, signed Gauge; candidate checkpoint restored between intervals")
+    println("Differential check passed: 32 intervals, 320 points, Int64 > 2^53, Double, explicit/exponential Histogram, signed Gauge; candidate checkpoint restored between intervals")
   })
 }

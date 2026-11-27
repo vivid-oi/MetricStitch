@@ -22,9 +22,9 @@ moon run --target wasm cli -- export session-receipt.json session-otlp.json
 
 ## 接入自己的 MoonBit 模块
 
-当前源码版本为 **0.2.0**，不代表已发布至 Mooncakes。可先用 `moon.work`
+当前源码版本为 **0.3.0**，不代表已发布至 Mooncakes。可先用 `moon.work`
 同时列入本库与自己的模块，在自己模块的 `moon.mod` 声明
-`"vivid-oi/metricstitch@0.2.0"`，`moon.pkg` 导入 `"vivid-oi/metricstitch"`。
+`"vivid-oi/metricstitch@0.3.0"`，`moon.pkg` 导入 `"vivid-oi/metricstitch"`。
 现成独立模块演示：
 
 ```sh
@@ -41,7 +41,7 @@ Windows 使用系统 `tar`。完整类型和方法见 [公开接口](pkg.generat
 | 已实现能力 | 明确限制 |
 |---|---|
 | 非负 Int64／有限非负 Double 单调 Sum 累积 | 不接受负增量或同序列数值种类切换 |
-| 显式桶 Histogram 累积，Gauge 校验透传 | 不支持指数直方图；不静默丢弃未知字段 |
+| 显式桶和指数 Histogram 累积，Gauge 校验透传 | 指数 scale -10..20；零阈值变化明确拒绝；未知字段不丢弃 |
 | 原子请求与序列回放、检查点、回执、安全文件输出 | 单写者顺序由调用方保证；不保证恰好一次交付 |
 | 稳定错误码与带索引的诊断路径 | `check` 返回第一项语义错误；语法和 I/O 错误走 stderr |
 | 类型化点的有界乱序缓冲与完整待处理点恢复 | 调用方推进 watermark；OTLP 请求入口仍严格按序 |
@@ -58,4 +58,4 @@ CI 在 Linux、macOS、Windows 实际运行原生测试、示例和回放。
 - [规模与基准方法](docs/performance.md)：记录实测条件和剩余复制成本。
 - [兼容性与发布步骤](docs/release.md)：接口、检查点与打包验证范围。
 
-网络接收、多写者协调、指数直方图尚未实现，见 [英文说明](README.md)。
+网络接收、多写者协调尚未实现。指数直方图范围见[详细契约](docs/exponential.md)。

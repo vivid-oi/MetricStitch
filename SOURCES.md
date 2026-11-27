@@ -7,6 +7,12 @@
 
 * Project implementation, tests and replay adapter are authored for MetricStitch,
   Apache-2.0.
+* Exponential histogram behavior follows the OpenTelemetry model/protocol; the
+  merge implementation is authored here using integer index folding, not copied
+  from Collector. `examples/exponential` adapts the already credited pinned OTLP
+  example's population and adds two intervals and a finer-scale representation.
+  The replay changes only that official exponential example's interval times.
+  https://opentelemetry.io/docs/specs/otel/metrics/data-model/#exponentialhistogram
 * `examples/upstream-metrics.json` is copied unchanged from OpenTelemetry Proto,
   commit `d31f7acf9d461fd0601077de516ac1eb7051422f`, file `examples/metrics.json`.
   Source https://github.com/open-telemetry/opentelemetry-proto/blob/d31f7acf9d461fd0601077de516ac1eb7051422f/examples/metrics.json

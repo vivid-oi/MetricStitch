@@ -38,6 +38,7 @@ pub(all) enum BufferedPoint {
   Counter(Sample)
   DoubleCounter(DoubleSample)
   Histogram(HistogramSample)
+  Exponential(ExponentialSample)
 }
 pub fn BufferedPoint::equal(Self, Self) -> Bool
 pub fn BufferedPoint::not_equal(Self, Self) -> Bool
@@ -66,6 +67,38 @@ pub fn DoubleSample::not_equal(Self, Self) -> Bool
 pub(all) struct DoubleStep {
   state : State
   points : Array[DoubleSample]
+  duplicates : Int32
+}
+
+#derive(Eq)
+pub(all) struct ExponentialBuckets {
+  offset : Int32
+  counts : Array[Int64]
+}
+pub fn ExponentialBuckets::equal(Self, Self) -> Bool
+pub fn ExponentialBuckets::not_equal(Self, Self) -> Bool
+
+#derive(Eq)
+pub(all) struct ExponentialSample {
+  series : String
+  start : Int64
+  end : Int64
+  scale : Int32
+  zero_count : Int64
+  zero_threshold : Double
+  positive : ExponentialBuckets
+  negative : ExponentialBuckets
+  count : Int64
+  sum : Double?
+  min : Double?
+  max : Double?
+}
+pub fn ExponentialSample::equal(Self, Self) -> Bool
+pub fn ExponentialSample::not_equal(Self, Self) -> Bool
+
+pub(all) struct ExponentialStep {
+  state : State
+  points : Array[ExponentialSample]
   duplicates : Int32
 }
 
@@ -148,6 +181,7 @@ pub struct State {
 }
 pub fn State::apply(Self, Array[Sample]) -> Step raise StitchError
 pub fn State::apply_doubles(Self, Array[DoubleSample]) -> DoubleStep raise StitchError
+pub fn State::apply_exponentials(Self, Array[ExponentialSample]) -> ExponentialStep raise StitchError
 pub fn State::apply_histograms(Self, Array[HistogramSample]) -> HistogramStep raise StitchError
 pub fn State::checkpoint(Self) -> @json.Json
 pub fn State::new(max_series? : Int32) -> Self raise StitchError

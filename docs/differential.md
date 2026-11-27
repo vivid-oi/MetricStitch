@@ -23,7 +23,10 @@ are normalized by decoding, rather than by ignoring fields in a JSON comparison.
 The generated, reproducible fixture has 32 contiguous intervals, two attribute
 identities per metric, Int64 values above 2^53, exact quarter-valued Doubles,
 explicit Histograms with changing bucket populations/extrema, and signed Gauge
-values. All 256 points are compared. MetricStitch checkpoints are restored
+values. Exponential histograms include positive/negative/zero populations and
+scale changes 2→1→0. All 320 points are compared. Empty exponential edge padding
+is trimmed to compare identical bucket-index populations; no populated bucket,
+count or other field is ignored. MetricStitch checkpoints are restored
 between every interval. These are synthetic test cases, not production captures.
 
 ## Common semantics, not identical policies

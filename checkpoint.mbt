@@ -55,7 +55,9 @@ pub fn State::checkpoint(self : State) -> Json {
       }),
     ),
   }
-  if self.doubles.is_empty() && self.histograms.is_empty() {
+  if self.doubles.is_empty() &&
+    self.histograms.is_empty() &&
+    self.exponentials.is_empty() {
     return base
   }
   let doubles = self.doubles.copy()
@@ -72,7 +74,7 @@ pub fn State::checkpoint(self : State) -> Json {
       "total": Json(r.total),
     }),
   )
-  if !self.histograms.is_empty() {
+  if !self.histograms.is_empty() || !self.exponentials.is_empty() {
     obj["version"] = Json(3)
     let histograms = self.histograms.copy()
     histograms.sort_by((a, b) => a.last_hist.series.compare(b.last_hist.series))
@@ -83,6 +85,17 @@ pub fn State::checkpoint(self : State) -> Json {
       }),
     )
   }
+  if !self.exponentials.is_empty() {
+    obj["version"] = Json(4)
+    let records = self.exponentials.copy()
+    records.sort_by((a, b) => a.last_exp.series.compare(b.last_exp.series))
+    obj["exponentials"] = Json::array(
+      records.map(r => {
+        "last": exp_json(r.last_exp),
+        "total": exp_json(r.total_exp),
+      }),
+    )
+  }
   base
 }
 
@@ -90,6 +103,9 @@ pub fn State::checkpoint(self : State) -> Json {
 /// Validate a versioned checkpoint before constructing state. This checks
 /// structural consistency, not authenticity of externally modified totals.
 pub fn State::restore(value : Json) -> State raise StitchError {
+  if value is { "version": Number(4.0, ..), .. } {
+    return restore_exponentials(value)
+  }
   if value is { "version": Number(3.0, ..), .. } {
     return restore_histograms(value)
   }

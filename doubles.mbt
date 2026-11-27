@@ -83,7 +83,7 @@ fn State::apply_double_impl(
     }
     ignore(finite_nonnegative(Json(sample.value)))
     let slot = lookup.get(sample.series)
-    if slot is Some(IntSlot(_) | HistogramSlot(_)) {
+    if slot is Some(IntSlot(_) | HistogramSlot(_) | ExponentialSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
@@ -92,8 +92,7 @@ fn State::apply_double_impl(
       _ => -1
     }
     let next : DoubleRecord = if index < 0 {
-      if records.length() + self.records.length() + self.histograms.length() ==
-        self.limit {
+      if lookup.length() == self.limit {
         issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
@@ -133,6 +132,7 @@ fn State::apply_double_impl(
       records: self.records,
       doubles: records,
       histograms: self.histograms,
+      exponentials: self.exponentials,
       limit: self.limit,
       index: lookup,
     },

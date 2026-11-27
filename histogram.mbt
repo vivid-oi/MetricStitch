@@ -175,7 +175,7 @@ fn State::apply_histogram_impl(
     validate_histogram(supplied)
     let p = copy_histogram(supplied)
     let slot = lookup.get(p.series)
-    if slot is Some(IntSlot(_) | DoubleSlot(_)) {
+    if slot is Some(IntSlot(_) | DoubleSlot(_) | ExponentialSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed metric kind")
     }
@@ -184,8 +184,7 @@ fn State::apply_histogram_impl(
       _ => -1
     }
     let total = if index < 0 {
-      if records.length() + self.records.length() + self.doubles.length() ==
-        self.limit {
+      if lookup.length() == self.limit {
         issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
@@ -234,6 +233,7 @@ fn State::apply_histogram_impl(
       records: self.records,
       doubles: self.doubles,
       histograms: records,
+      exponentials: self.exponentials,
       limit: self.limit,
       index: lookup,
     },

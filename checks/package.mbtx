@@ -10,11 +10,11 @@ async fn main {
   let args = @env.args()
   let moon = if args.length() > 1 { args[1] } else { "moon" }
   let target = if args.length() > 2 { args[2] } else { "wasm" }
-  if !@fs.read_file("moon.mod").text().contains("version = \"0.2.0\"") {
-    fail("package checker expects source version 0.2.0")
+  if !@fs.read_file("moon.mod").text().contains("version = \"0.3.0\"") {
+    fail("package checker expects source version 0.3.0")
   }
   @shell.Cmd(moon, ["package"]).run()
-  let archive = @fs.realpath("_build/publish/vivid-oi-metricstitch-0.2.0.zip")
+  let archive = @fs.realpath("_build/publish/vivid-oi-metricstitch-0.3.0.zip")
   let windows = @async.platform is Windows
   let listing = if windows {
     @shell.Cmd("tar", ["-tf", archive]).output()
@@ -51,5 +51,5 @@ async fn main {
   }
   @shell.Cmd(moon, ["-C", library, "test", "--target", target, "--deny-warn"]).run()
   @shell.Cmd(moon, ["-C", dir, "run", "--target", target, "consumer"]).run()
-  println("Packaged 0.2.0 archive passed tests and external consumer (" + target + ")")
+  println("Packaged 0.3.0 archive passed tests and external consumer (" + target + ")")
 }

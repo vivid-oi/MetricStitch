@@ -29,6 +29,7 @@ pub struct State {
   priv records : Array[Record]
   priv doubles : Array[DoubleRecord]
   priv histograms : Array[HistogramRecord]
+  priv exponentials : Array[ExponentialRecord]
   priv limit : Int32
   priv index : Map[String, SeriesSlot]
 }
@@ -50,6 +51,7 @@ pub fn State::new(max_series~ : Int32 = 1024) -> State raise StitchError {
     records: [],
     doubles: [],
     histograms: [],
+    exponentials: [],
     limit: max_series,
     index: Map([]),
   }
@@ -92,7 +94,7 @@ fn State::apply_int_impl(
   let mut duplicates = 0
   for sample in batch {
     let slot = lookup.get(sample.series)
-    if slot is Some(DoubleSlot(_) | HistogramSlot(_)) {
+    if slot is Some(DoubleSlot(_) | HistogramSlot(_) | ExponentialSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
@@ -110,8 +112,7 @@ fn State::apply_int_impl(
       _ => -1
     }
     let next : Record = if index < 0 {
-      if records.length() + self.doubles.length() + self.histograms.length() ==
-        self.limit {
+      if lookup.length() == self.limit {
         issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
@@ -150,6 +151,7 @@ fn State::apply_int_impl(
       records,
       doubles: self.doubles,
       histograms: self.histograms,
+      exponentials: self.exponentials,
       limit: self.limit,
       index: lookup,
     },

@@ -140,15 +140,22 @@ fn process_otlp_impl(
         location.val = metric_path
         let m = fields(
           metric,
-          ["name", "description", "unit", "sum", "histogram", "gauge"],
+          [
+            "name", "description", "unit", "sum", "histogram", "gauge", "exponentialHistogram",
+          ],
           "metric",
           issue~,
         )
-        let kinds = ["sum", "histogram", "gauge"].filter(k => m.contains(k))
+        let kinds = ["sum", "histogram", "gauge", "exponentialHistogram"].filter(k => {
+            m.contains(k)
+          },
+        )
         guard kinds is [kind] else {
           raise Invalid("metric requires exactly one supported kind")
         }
         let is_histogram = kind == "histogram"
+        let is_exp = kind == "exponentialHistogram"
+        let is_distribution = is_histogram || is_exp
         let name = text(required(m, "name"), "metric.name")
         if name.is_empty() {
           raise Invalid("empty metric name")
@@ -171,7 +178,7 @@ fn process_otlp_impl(
         location.val = metric_path + "/" + kind
         let sum = fields(
           required(m, kind),
-          if is_histogram {
+          if is_distribution {
             ["dataPoints", "aggregationTemporality"]
           } else {
             ["dataPoints", "aggregationTemporality", "isMonotonic"]
@@ -181,7 +188,7 @@ fn process_otlp_impl(
         )
         if required(sum, "aggregationTemporality") !=
           Json(if cumulative { 2 } else { 1 }) ||
-          (!is_histogram && required(sum, "isMonotonic") != Json(true)) {
+          (!is_distribution && required(sum, "isMonotonic") != Json(true)) {
           issue.val = UnsupportedData
           raise Invalid(name + ": unexpected temporality or non-monotonic Sum")
         }
@@ -192,7 +199,13 @@ fn process_otlp_impl(
           location.val = points_path + "/" + pi.to_string()
           let p = fields(
             point,
-            if is_histogram {
+            if is_exp {
+              [
+                "attributes", "startTimeUnixNano", "timeUnixNano", "count", "sum",
+                "min", "max", "scale", "zeroCount", "zeroThreshold", "positive",
+                "negative", "flags", "exemplars",
+              ]
+            } else if is_histogram {
               [
                 "attributes", "startTimeUnixNano", "timeUnixNano", "count", "sum",
                 "min", "max", "explicitBounds", "bucketCounts", "flags", "exemplars",
@@ -230,10 +243,20 @@ fn process_otlp_impl(
             "startTimeUnixNano",
           )
           let end = decimal(required(p, "timeUnixNano"), "timeUnixNano")
-          if !is_histogram && p.contains("asInt") == p.contains("asDouble") {
+          if !is_distribution && p.contains("asInt") == p.contains("asDouble") {
             raise Invalid("point requires exactly one numeric value")
           }
-          let converted = if is_histogram {
+          let converted = if is_exp {
+            let point_state = if cumulative { State::new() } else { current }
+            let step = point_state.apply_exp_impl(
+              [read_exp(identity, p, issue~)],
+              issue,
+              writable=true,
+            )
+            current = step.state
+            duplicates += step.duplicates
+            step.points.map(p => (p.start, exp_json(p)))
+          } else if is_histogram {
             let point_state = if cumulative { State::new() } else { current }
             let step = point_state.apply_histogram_impl(
               [read_histogram(identity, p)],
@@ -279,7 +302,7 @@ fn process_otlp_impl(
           for (origin, total) in converted {
             let fields = p.copy()
             fields["startTimeUnixNano"] = Json(origin.to_string())
-            if is_histogram {
+            if is_distribution {
               guard total is Object(encoded) else {
                 abort("histogram serialization")
               }

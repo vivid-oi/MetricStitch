@@ -5,6 +5,7 @@ pub(all) enum BufferedPoint {
   Counter(Sample)
   DoubleCounter(DoubleSample)
   Histogram(HistogramSample)
+  Exponential(ExponentialSample)
 }
 
 ///|
@@ -81,6 +82,11 @@ pub fn ReorderBuffer::new(
       raise ReorderInvalid("watermark precedes committed state")
     }
   }
+  for r in state.exponentials {
+    if r.last_exp.end > watermark {
+      raise ReorderInvalid("watermark precedes committed state")
+    }
+  }
   { committed: state, pending: [], watermark, max_pending, max_delay_ns, }
 }
 
@@ -100,6 +106,7 @@ fn BufferedPoint::identity(self : BufferedPoint) -> (String, Int64, Int64) {
     Counter(p) => (p.series, p.start, p.end)
     DoubleCounter(p) => (p.series, p.start, p.end)
     Histogram(p) => (p.series, p.start, p.end)
+    Exponential(p) => (p.series, p.start, p.end)
   }
 }
 
@@ -107,6 +114,7 @@ fn BufferedPoint::identity(self : BufferedPoint) -> (String, Int64, Int64) {
 fn BufferedPoint::detached(self : BufferedPoint) -> BufferedPoint {
   match self {
     Histogram(p) => Histogram(copy_histogram(p))
+    Exponential(p) => Exponential(copy_exp(p))
     _ => self
   }
 }
@@ -117,6 +125,7 @@ fn BufferedPoint::validate(self : BufferedPoint) -> Unit raise StitchError {
     Counter(p) => ignore(State::new().apply([p]))
     DoubleCounter(p) => ignore(State::new().apply_doubles([p]))
     Histogram(p) => validate_histogram(p)
+    Exponential(p) => validate_exp(p)
   }
 }
 
@@ -127,6 +136,14 @@ fn BufferedPoint::same_profile(
 ) -> Bool {
   match (self, other) {
     (Counter(_), Counter(_)) | (DoubleCounter(_), DoubleCounter(_)) => true
+    (Exponential(a), Exponential(b)) =>
+      a.zero_threshold == b.zero_threshold &&
+      (a.sum is Some(_)) == (b.sum is Some(_)) &&
+      (
+        a.count == 0L ||
+        b.count == 0L ||
+        (a.min is Some(_)) == (b.min is Some(_))
+      )
     (Histogram(a), Histogram(b)) =>
       a.bounds == b.bounds &&
       (a.sum is Some(_)) == (b.sum is Some(_)) &&
@@ -145,6 +162,7 @@ fn State::last_buffered(self : State, series : String) -> BufferedPoint? {
     Some(IntSlot(i)) => Some(Counter(self.records[i].last))
     Some(DoubleSlot(i)) => Some(DoubleCounter(self.doubles[i].last))
     Some(HistogramSlot(i)) => Some(Histogram(self.histograms[i].last_hist))
+    Some(ExponentialSlot(i)) => Some(Exponential(self.exponentials[i].last_exp))
     None => None
   }
 }
@@ -265,6 +283,21 @@ pub fn ReorderBuffer::push(
         duplicates += step.duplicates
         for p in step.points {
           output.push(DoubleCounter(p))
+        }
+      }
+      Exponential(p) => {
+        let step = current.apply_exp_impl([p], issue, writable=true) catch {
+          Invalid(message) =>
+            if issue.val == NoncontiguousInterval {
+              raise MissingInterval(series)
+            } else {
+              raise ReorderInvalid(message)
+            }
+        }
+        current = step.state
+        duplicates += step.duplicates
+        for p in step.points {
+          output.push(Exponential(p))
         }
       }
       Histogram(p) => {

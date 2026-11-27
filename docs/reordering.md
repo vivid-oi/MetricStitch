@@ -2,7 +2,7 @@
 
 `ReorderBuffer` is an optional typed layer around the strict accumulator.
 It accepts `BufferedPoint::Counter(Sample)`, `DoubleCounter(DoubleSample)` and
-`Histogram(HistogramSample)`. It is not an OTLP receiver or an automatic repair
+`Histogram(HistogramSample)` and `Exponential(ExponentialSample)`. It is not an OTLP receiver or an automatic repair
 of arbitrary request ordering. Gauges do not require this accumulation layer.
 
 1. Construct it from a committed `State`, a positive initial `watermark`,

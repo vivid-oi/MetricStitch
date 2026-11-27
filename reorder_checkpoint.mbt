@@ -18,6 +18,7 @@ fn buffered_json(point : BufferedPoint) -> Json {
         "value": Json(p.value),
       }
     Histogram(p) => { "kind": "histogram", "point": histogram_json(p) }
+    Exponential(p) => { "kind": "exponential", "point": exp_json(p) }
   }
 }
 
@@ -42,6 +43,10 @@ fn read_buffered(value : Json) -> BufferedPoint raise StitchError {
     "buffered point",
   )
   let kind = text(required(obj, "kind"), "kind")
+  if kind == "exponential" {
+    ignore(fields(value, ["kind", "point"], "exponential envelope"))
+    return Exponential(checkpoint_exp(required(obj, "point")))
+  }
   if kind == "histogram" {
     ignore(fields(value, ["kind", "point"], "histogram envelope"))
     return Histogram(checkpoint_histogram(required(obj, "point")))

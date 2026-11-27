@@ -88,7 +88,10 @@ fn restore_histograms(value : Json) -> State raise StitchError {
     let r = fields(item, ["last", "total"], "histogram record")
     let last = checkpoint_histogram(required(r, "last"))
     let total = checkpoint_histogram(required(r, "total"))
-    ignore(base.apply_histograms([last]))
+    if base.index.contains(last.series) {
+      raise Invalid("series changed metric kind")
+    }
+    ignore(State::new().apply_histograms([last]))
     if seen.contains(last.series) {
       raise Invalid("duplicate histogram checkpoint series")
     }
@@ -126,10 +129,5 @@ fn restore_histograms(value : Json) -> State raise StitchError {
     }
     records.push({ last_hist: last, total_hist: total, })
   }
-  {
-    records: base.records,
-    doubles: base.doubles,
-    histograms: records,
-    limit: base.limit,
-  }
+  indexed_state(base.records, base.doubles, records, base.limit)
 }

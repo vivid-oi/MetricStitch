@@ -1,0 +1,6 @@
+import {
+  "vivid-oi/metricstitch",
+  "moonbitlang/core/bench",
+}
+
+pkgtype(kind: "executable")

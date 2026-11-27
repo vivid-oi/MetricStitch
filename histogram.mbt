@@ -165,24 +165,23 @@ fn State::apply_histogram_impl(
   self : State,
   batch : Array[HistogramSample],
   issue : Ref[IssueCode],
+  writable~ : Bool = false,
 ) -> HistogramStep raise StitchError {
-  let records = self.histograms.copy()
+  let records = if writable { self.histograms } else { self.histograms.copy() }
+  let lookup = if writable { self.index } else { self.index.copy() }
   let points = []
   let mut duplicates = 0
   for supplied in batch {
     validate_histogram(supplied)
     let p = copy_histogram(supplied)
-    if self.records.any(r => r.last.series == p.series) ||
-      self.doubles.any(r => r.last.series == p.series) {
+    let slot = lookup.get(p.series)
+    if slot is Some(IntSlot(_) | DoubleSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed metric kind")
     }
-    let mut index = -1
-    for i, record in records {
-      if record.last_hist.series == p.series {
-        index = i
-        break
-      }
+    let index = match slot {
+      Some(HistogramSlot(i)) => i
+      _ => -1
     }
     let total = if index < 0 {
       if records.length() + self.records.length() + self.doubles.length() ==
@@ -223,6 +222,7 @@ fn State::apply_histogram_impl(
     }
     let record : HistogramRecord = { last_hist: p, total_hist: total, }
     if index < 0 {
+      lookup[p.series] = HistogramSlot(records.length())
       records.push(record)
     } else {
       records[index] = record
@@ -235,6 +235,7 @@ fn State::apply_histogram_impl(
       doubles: self.doubles,
       histograms: records,
       limit: self.limit,
+      index: lookup,
     },
     points,
     duplicates,

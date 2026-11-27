@@ -89,7 +89,7 @@ fn process_otlp_impl(
   location.val = "/resourceMetrics"
   let resources = array(required(root, "resourceMetrics"), "resourceMetrics")
   let output = []
-  let mut current = state
+  let mut current = state.detached()
   let mut duplicates = 0
   for ri, resource in resources {
     let resource_path = "/resourceMetrics/" + ri.to_string()
@@ -238,6 +238,7 @@ fn process_otlp_impl(
             let step = point_state.apply_histogram_impl(
               [read_histogram(identity, p)],
               issue,
+              writable=true,
             )
             current = step.state
             duplicates += step.duplicates
@@ -250,7 +251,11 @@ fn process_otlp_impl(
               value: decimal(required(p, "asInt"), "asInt"),
             }
             let point_state = if cumulative { State::new() } else { current }
-            let step = point_state.apply_int_impl([sample], issue)
+            let step = point_state.apply_int_impl(
+              [sample],
+              issue,
+              writable=true,
+            )
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value.to_string())))
@@ -262,7 +267,11 @@ fn process_otlp_impl(
               value: finite_nonnegative(required(p, "asDouble")),
             }
             let point_state = if cumulative { State::new() } else { current }
-            let step = point_state.apply_double_impl([sample], issue)
+            let step = point_state.apply_double_impl(
+              [sample],
+              issue,
+              writable=true,
+            )
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value)))

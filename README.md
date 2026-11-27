@@ -120,6 +120,8 @@ are demonstration edits, not production telemetry. See SOURCES.md.
 The core supports wasm, wasm-gc, js and native. The async CLI supports wasm and
 native. CI runs core tests on the portable targets and native Linux/macOS/Windows,
 and executes the documented replay on Wasm and each native OS.
+See [scale and reproducible benchmarks](docs/performance.md) for the private
+series index, transaction copying costs and measured workload limitations.
 
 ## Explicit histograms
 

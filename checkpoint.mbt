@@ -143,5 +143,5 @@ pub fn State::restore(value : Json) -> State raise StitchError {
     }
     records.push({ last, origin, total, })
   }
-  { records, doubles: [], histograms: [], limit: state.limit, }
+  indexed_state(records, [], [], state.limit)
 }

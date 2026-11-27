@@ -30,6 +30,7 @@ pub struct State {
   priv doubles : Array[DoubleRecord]
   priv histograms : Array[HistogramRecord]
   priv limit : Int32
+  priv index : Map[String, SeriesSlot]
 }
 
 ///|
@@ -45,7 +46,13 @@ pub fn State::new(max_series~ : Int32 = 1024) -> State raise StitchError {
   if max_series <= 0 || max_series > 100000 {
     raise Invalid("max_series must be in 1..100000")
   }
-  { records: [], doubles: [], histograms: [], limit: max_series, }
+  {
+    records: [],
+    doubles: [],
+    histograms: [],
+    limit: max_series,
+    index: Map([]),
+  }
 }
 
 ///|
@@ -77,13 +84,15 @@ fn State::apply_int_impl(
   self : State,
   batch : Array[Sample],
   issue : Ref[IssueCode],
+  writable~ : Bool = false,
 ) -> Step raise StitchError {
-  let records = self.records.copy()
+  let records = if writable { self.records } else { self.records.copy() }
+  let lookup = if writable { self.index } else { self.index.copy() }
   let points = []
   let mut duplicates = 0
   for sample in batch {
-    if self.doubles.any(r => r.last.series == sample.series) ||
-      self.histograms.any(r => r.last_hist.series == sample.series) {
+    let slot = lookup.get(sample.series)
+    if slot is Some(DoubleSlot(_) | HistogramSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
@@ -96,12 +105,9 @@ fn State::apply_int_impl(
         "expected a bounded series key, positive increasing times and nonnegative Int64 delta",
       )
     }
-    let mut index = -1
-    for i, record in records {
-      if record.last.series == sample.series {
-        index = i
-        break
-      }
+    let index = match slot {
+      Some(IntSlot(i)) => i
+      _ => -1
     }
     let next : Record = if index < 0 {
       if records.length() + self.doubles.length() + self.histograms.length() ==
@@ -132,6 +138,7 @@ fn State::apply_int_impl(
       { last: sample, origin: old.origin, total: old.total + sample.value, }
     }
     if index < 0 {
+      lookup[sample.series] = IntSlot(records.length())
       records.push(next)
     } else {
       records[index] = next
@@ -144,6 +151,7 @@ fn State::apply_int_impl(
       doubles: self.doubles,
       histograms: self.histograms,
       limit: self.limit,
+      index: lookup,
     },
     points,
     duplicates,

@@ -68,8 +68,10 @@ fn State::apply_double_impl(
   self : State,
   batch : Array[DoubleSample],
   issue : Ref[IssueCode],
+  writable~ : Bool = false,
 ) -> DoubleStep raise StitchError {
-  let records = self.doubles.copy()
+  let records = if writable { self.doubles } else { self.doubles.copy() }
+  let lookup = if writable { self.index } else { self.index.copy() }
   let points = []
   let mut duplicates = 0
   for sample in batch {
@@ -80,17 +82,14 @@ fn State::apply_double_impl(
       raise Invalid("expected bounded series and positive increasing interval")
     }
     ignore(finite_nonnegative(Json(sample.value)))
-    if self.records.any(r => r.last.series == sample.series) ||
-      self.histograms.any(r => r.last_hist.series == sample.series) {
+    let slot = lookup.get(sample.series)
+    if slot is Some(IntSlot(_) | HistogramSlot(_)) {
       issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
-    let mut index = -1
-    for i, record in records {
-      if record.last.series == sample.series {
-        index = i
-        break
-      }
+    let index = match slot {
+      Some(DoubleSlot(i)) => i
+      _ => -1
     }
     let next : DoubleRecord = if index < 0 {
       if records.length() + self.records.length() + self.histograms.length() ==
@@ -122,6 +121,7 @@ fn State::apply_double_impl(
       { last: sample, origin: old.origin, total, }
     }
     if index < 0 {
+      lookup[sample.series] = DoubleSlot(records.length())
       records.push(next)
     } else {
       records[index] = next
@@ -134,6 +134,7 @@ fn State::apply_double_impl(
       doubles: records,
       histograms: self.histograms,
       limit: self.limit,
+      index: lookup,
     },
     points,
     duplicates,
@@ -175,7 +176,10 @@ fn restore_doubles(value : Json) -> State raise StitchError {
       end: decimal(required(r, "end"), "end"),
       value: finite_nonnegative(required(r, "delta")),
     }
-    ignore(base.apply_doubles([last]))
+    if base.index.contains(series) {
+      raise Invalid("series changed numeric kind")
+    }
+    ignore(State::new().apply_doubles([last]))
     let origin = decimal(required(r, "origin"), "origin")
     let total = finite_nonnegative(required(r, "total"))
     if origin <= 0L ||
@@ -186,5 +190,5 @@ fn restore_doubles(value : Json) -> State raise StitchError {
     }
     doubles.push({ last, origin, total, })
   }
-  { records: base.records, doubles, histograms: [], limit: base.limit, }
+  indexed_state(base.records, doubles, [], base.limit)
 }

@@ -64,17 +64,17 @@ pub fn State::partition_before(
   if cutoff <= 0L {
     raise Invalid("cutoff must be positive Unix nanoseconds")
   }
-  let retained : State = {
-    records: self.records.filter(r => r.last.end >= cutoff),
-    doubles: self.doubles.filter(r => r.last.end >= cutoff),
-    histograms: self.histograms.filter(r => r.last_hist.end >= cutoff),
-    limit: self.limit,
-  }
-  let archived : State = {
-    records: self.records.filter(r => r.last.end < cutoff),
-    doubles: self.doubles.filter(r => r.last.end < cutoff),
-    histograms: self.histograms.filter(r => r.last_hist.end < cutoff),
-    limit: self.limit,
-  }
+  let retained = indexed_state(
+    self.records.filter(r => r.last.end >= cutoff),
+    self.doubles.filter(r => r.last.end >= cutoff),
+    self.histograms.filter(r => r.last_hist.end >= cutoff),
+    self.limit,
+  )
+  let archived = indexed_state(
+    self.records.filter(r => r.last.end < cutoff),
+    self.doubles.filter(r => r.last.end < cutoff),
+    self.histograms.filter(r => r.last_hist.end < cutoff),
+    self.limit,
+  )
   { retained, archived, }
 }

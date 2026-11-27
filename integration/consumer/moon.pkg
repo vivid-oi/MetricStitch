@@ -1,0 +1,5 @@
+import {
+  "vivid-oi/metricstitch",
+}
+
+pkgtype(kind: "executable")

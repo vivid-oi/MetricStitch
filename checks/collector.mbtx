@@ -1,0 +1,112 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/process",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+----
+
+// Only the Collector and curl contact loopback. No external telemetry is sent.
+async fn main {
+  let args = @env.args()
+  if args.length() < 2 || args.length() > 4 {
+    fail("usage: collector.mbtx COLLECTOR_BINARY [MOON_BINARY] [CURL_BINARY]")
+  }
+  let moon = if args.length() > 2 { args[2] } else { "moon" }
+  let curl = if args.length() > 3 { args[3] } else { "curl" }
+  let version = @shell.Cmd(args[1], ["--version"]).output()
+  version.check()
+  if !version.stdout().contains("0.166.0") { fail("expected Collector 0.166.0") }
+  let dir = @fs.tmpdir(prefix="metricstitch-collector-")
+  defer {
+    for file in @fs.readdir(dir[:]) { @fs.remove((dir + "/" + file)[:]) }
+    @fs.rmdir(dir[:])
+  }
+  let config = dir + "/collector.yaml"
+  let output = dir + "/received.jsonl"
+  let log = dir + "/collector.log"
+  @fs.write_file(config[:],
+    "receivers:\n  otlp:\n    protocols:\n      http:\n        endpoint: 127.0.0.1:43180\n" +
+    "exporters:\n  file:\n    path: " + Json(output).stringify() + "\n    flush_interval: 100ms\n" +
+    "service:\n  pipelines:\n    metrics:\n      receivers: [otlp]\n      exporters: [file]\n")
+  let prefix = ["run", "--target", "wasm", "cli", "--"]
+  guard @json.parse(@fs.read_file("examples/session.json").text()) is {"requests": Array([first, second]), ..} else { fail("session shape") }
+  let input = dir + "/input.json"
+  let receipt1 = dir + "/first.json"
+  let receipt2 = dir + "/second.json"
+  let retry = dir + "/retry.json"
+  let rejected = dir + "/rejected.json"
+  @fs.write_file(input[:], first.stringify())
+  @shell.Cmd(moon, prefix + ["apply-to", input, receipt1]).run()
+  @shell.Cmd(moon, prefix + ["apply-to", input, retry, receipt1]).run()
+  guard @json.parse(@fs.read_file(retry[:]).text()) is {"duplicates": Number(2.0, ..), ..} else { fail("retry accumulated state twice") }
+  @fs.write_file(input[:], "{\"resourceMetrics\":[],\"unsupported\":true}")
+  let invalid = @shell.Cmd(moon, prefix + ["apply-to", input, rejected, receipt1]).output()
+  if invalid.exit_code() != 2 || @fs.exists(rejected[:]) { fail("invalid input published output") }
+  @fs.write_file(input[:], second.stringify())
+  @shell.Cmd(moon, prefix + ["apply-to", input, receipt2, receipt1]).run()
+  let exported : Array[String] = []
+  for i, receipt in [receipt1, receipt2] {
+    let path = dir + "/otlp-" + i.to_string() + ".json"
+    @shell.Cmd(moon, prefix + ["export", receipt, path]).run()
+    exported.push(path)
+  }
+  @async.with_task_group(async fn(group) {
+    let logging = @process.redirect_to_file(log)
+    let collector = @process.spawn(group, args[1][:], ["--config", config],
+      stdout=logging, stderr=logging, no_console_window=true,
+      cancel_handler=@process.hard_cancel())
+    defer collector.cancel()
+    let endpoint = "http://127.0.0.1:43180/v1/metrics"
+    let mut ready = false
+    for _ in 0..<100 {
+      if collector.try_wait() is Some(_) { fail("Collector exited: " + @fs.read_file(log[:]).text()) }
+      let probe = @shell.Cmd(curl, ["--silent", "--max-time", "1", "--output", dir + "/probe", "--write-out", "%{http_code}", endpoint]).output()
+      if probe.stdout() == "405" { ready = true; break }
+      @async.sleep(100)
+    }
+    if !ready { fail("Collector did not start: " + @fs.read_file(log[:]).text()) }
+    for path in exported {
+      let sent = @shell.Cmd(curl, ["--silent", "--show-error", "--max-time", "5", "--header", "Content-Type: application/json", "--data-binary", "@" + path, "--write-out", "\n%{http_code}", endpoint]).output()
+      sent.check()
+      if !sent.stdout().has_suffix("\n200") || sent.stdout().contains("rejectedDataPoints") {
+        fail("Collector refused output: " + sent.stdout())
+      }
+    }
+    let mut lines : Array[String] = []
+    for _ in 0..<100 {
+      if @fs.exists(output[:]) {
+        lines = @fs.read_file(output[:]).text().split("\n").filter(s => !s.trim().is_empty()).map(s => s.to_owned()).collect()
+        if lines.length() >= 2 { break }
+      }
+      @async.sleep(100)
+    }
+    if lines.length() != 2 { fail("expected two exported metric requests") }
+    for i, line in lines {
+      guard @json.parse(line) is {"resourceMetrics": [{"scopeMetrics": [{"metrics": Array(metrics), ..}], ..}], ..} else { fail("Collector file shape") }
+      let mut checked = 0
+      for metric in metrics {
+        match metric {
+          {"sum": {"aggregationTemporality": Number(2.0, ..), "dataPoints": [{"asDouble": Number(n, ..), ..}], ..}, ..} => {
+            if n != (if i == 0 { 5.0 } else { 7.5 }) { fail("counter total changed in Collector") }
+            checked += 1
+          }
+          {"histogram": {"aggregationTemporality": Number(2.0, ..), "dataPoints": [{"count": String(n), ..}], ..}, ..} => {
+            if n != (if i == 0 { "2" } else { "4" }) { fail("histogram count changed in Collector") }
+            checked += 1
+          }
+          {"gauge": {"dataPoints": [{"asDouble": Number(n, ..), ..}], ..}, ..} => {
+            if n != (if i == 0 { 10.0 } else { 11.0 }) { fail("Gauge changed in Collector") }
+            checked += 1
+          }
+          _ => fail("unexpected Collector metric")
+        }
+      }
+      if checked != 3 { fail("Collector lost metrics") }
+    }
+    println("Collector 0.166.0 accepted and exported both intervals: counter 7.5, histogram 4, Gauge 11; recovery and retries verified")
+  })
+}

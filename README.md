@@ -31,8 +31,9 @@ The second interval has cumulative counter 7.5, histogram population 4 and Gauge
 The exported file is a standard OTLP request suitable for an existing exporter
 or receiver. The last command independently decodes it with the community
 OpenTelemetry generated model and verifies JSON and Protobuf round trips.
-This is protocol-model interoperability validation. A live Collector deployment
-is outside this example. `checks/replay.mbtx` exercises these same commands in
+This is protocol-model interoperability validation. A separate
+[Collector integration](docs/collector.md) checks a real pinned receiver and
+file exporter, plus a separate consumer module. `checks/replay.mbtx` exercises these same commands in
 a temporary directory on Wasm and all three native CI operating systems.
 
 Direct library callers provide series keys. `State::checkpoint` returns versioned

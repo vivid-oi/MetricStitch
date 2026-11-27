@@ -30,6 +30,11 @@
   https://github.com/moonbit-community/opentelemetry.mbt
   https://github.com/moonbitlang/protobuf
 * The root Apache-2.0 license text comes from the owner's MoonPOMerge repository.
+* `checks/collector.mbtx` runs the official OpenTelemetry Collector core 0.166.0
+  binary as an external test dependency (Apache-2.0); no binary is vendored.
+  Receiver/file-exporter configuration follows the upstream documentation:
+  https://github.com/open-telemetry/opentelemetry-collector/tree/v0.166.0/receiver/otlpreceiver
+  https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.166.0/exporter/fileexporter
 * `cli/publish.mbt` adapts the Apache-2.0 temporary-file publication pattern from
   https://github.com/vivid-oi/MoonPOMerge/blob/974bf668b480334dd2b38b1eaa6744faf9b26471/cmd/main/driver.mbt
   That source credits FontPin and MBTRelMask.

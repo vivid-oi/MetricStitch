@@ -195,8 +195,12 @@ Run `moon run examples/archive` to exercise archival and retry recovery.
 
 ## Roadmap
 
-Exponential histograms,
-out-of-order buffering, network receivers and multi-writer coordination are
+The optional [bounded reordering layer](docs/reordering.md) accepts typed Int64,
+Double and Histogram deltas with explicit watermarks, recoverable pending state,
+strict limits and no automatic eviction. Run `moon run examples/reorder`.
+The OTLP request API remains strict and does not reorder requests automatically.
+
+Exponential histograms, network receivers and multi-writer coordination are
 planned capabilities. The current profile requires contiguous intervals. It
 remembers only the most recent delta per series and does not offer unbounded
 deduplication or an exactly-once delivery guarantee.

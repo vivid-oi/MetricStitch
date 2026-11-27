@@ -19,11 +19,29 @@ pub fn process_sequence(State, Array[@json.Json]) -> OtlpStep raise StitchError
 pub fn validate_otlp(State, @json.Json) -> Diagnostic?
 
 // Errors
+pub suberror BufferError {
+  ReorderInvalid(String)
+  LatePoint(String)
+  BufferFull
+  WindowExceeded(String)
+  ReorderConflict(String)
+  MissingInterval(String)
+}
+
 pub suberror StitchError {
   Invalid(String)
 }
 
 // Types and methods
+#derive(Eq)
+pub(all) enum BufferedPoint {
+  Counter(Sample)
+  DoubleCounter(DoubleSample)
+  Histogram(HistogramSample)
+}
+pub fn BufferedPoint::equal(Self, Self) -> Bool
+pub fn BufferedPoint::not_equal(Self, Self) -> Bool
+
 pub(all) struct Diagnostic {
   pointer : String
   message : String
@@ -96,6 +114,23 @@ pub fn OtlpStep::receipt(Self) -> @json.Json
 pub(all) struct Partition {
   retained : State
   archived : State
+}
+
+pub struct ReorderBuffer {
+  // private fields
+}
+pub fn ReorderBuffer::advance(Self, Int64) -> ReorderStep raise BufferError
+pub fn ReorderBuffer::checkpoint(Self) -> @json.Json
+pub fn ReorderBuffer::new(State, watermark~ : Int64, max_pending? : Int32, max_delay_ns~ : Int64) -> Self raise BufferError
+pub fn ReorderBuffer::pending_count(Self) -> Int32
+pub fn ReorderBuffer::push(Self, Array[BufferedPoint], watermark~ : Int64) -> ReorderStep raise BufferError
+pub fn ReorderBuffer::restore(@json.Json) -> Self raise BufferError
+pub fn ReorderBuffer::state(Self) -> State
+
+pub(all) struct ReorderStep {
+  buffer : ReorderBuffer
+  points : Array[BufferedPoint]
+  duplicates : Int32
 }
 
 #derive(Eq)

@@ -25,6 +25,7 @@ jobs:
       - run: moon test --target ${{ matrix.target }} --deny-warn
       - run: moon run --target ${{ matrix.target }} examples/counter
       - run: moon run --target ${{ matrix.target }} examples/archive
+      - run: moon run --target ${{ matrix.target }} examples/reorder
       - run: moon -C integration run --target ${{ matrix.target }} consumer
       - if: matrix.target == 'wasm'
         run: moon run checks/replay.mbtx -- moon wasm
@@ -45,6 +46,7 @@ jobs:
       - run: moon test --target native --deny-warn
       - run: moon run --target native examples/counter
       - run: moon run --target native examples/archive
+      - run: moon run --target native examples/reorder
       - run: moon -C integration run --target native consumer
       - run: moon run checks/replay.mbtx -- moon native
   collector:

@@ -157,6 +157,15 @@ pub fn State::apply_histograms(
   self : State,
   batch : Array[HistogramSample],
 ) -> HistogramStep raise StitchError {
+  self.apply_histogram_impl(batch, Ref(InvalidInput))
+}
+
+///|
+fn State::apply_histogram_impl(
+  self : State,
+  batch : Array[HistogramSample],
+  issue : Ref[IssueCode],
+) -> HistogramStep raise StitchError {
   let records = self.histograms.copy()
   let points = []
   let mut duplicates = 0
@@ -165,6 +174,7 @@ pub fn State::apply_histograms(
     let p = copy_histogram(supplied)
     if self.records.any(r => r.last.series == p.series) ||
       self.doubles.any(r => r.last.series == p.series) {
+      issue.val = KindChanged
       raise Invalid("series changed metric kind")
     }
     let mut index = -1
@@ -177,6 +187,7 @@ pub fn State::apply_histograms(
     let total = if index < 0 {
       if records.length() + self.records.length() + self.doubles.length() ==
         self.limit {
+        issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
       copy_histogram(p)
@@ -187,9 +198,28 @@ pub fn State::apply_histograms(
         continue
       }
       if p.start != old.last_hist.end {
+        issue.val = interval_issue(
+          p.start,
+          p.end,
+          old.last_hist.start,
+          old.last_hist.end,
+        )
         raise Invalid("noncontiguous histogram interval")
       }
-      add_histogram(old.total_hist, p)
+      if old.total_hist.bounds != p.bounds ||
+        (old.total_hist.sum is Some(_)) != (p.sum is Some(_)) ||
+        (
+          old.total_hist.count > 0L &&
+          p.count > 0L &&
+          (old.total_hist.min is Some(_)) != (p.min is Some(_))
+        ) {
+        issue.val = KindChanged
+      } else {
+        issue.val = NumericOverflow
+      }
+      let total = add_histogram(old.total_hist, p)
+      issue.val = InvalidInput
+      total
     }
     let record : HistogramRecord = { last_hist: p, total_hist: total, }
     if index < 0 {

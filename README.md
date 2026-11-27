@@ -154,6 +154,16 @@ CI gate. Valid input prints a JSON report and exits 0. Semantic errors print the
 diagnostic report and exit 2. JSON syntax and file errors use stderr and exit 2.
 The command checks the supplied state without publishing a converted receipt.
 
+`diagnose_otlp(state, request)` adds a stable `IssueCode` without changing the
+legacy diagnostic or `StitchError::Invalid(String)` API. The CLI `check` report
+includes `diagnostic.code`: `invalid_input`, `unsupported_data`,
+`noncontiguous_interval`, `conflicting_retry`, `series_limit`, `numeric_overflow`
+or `kind_changed`. Codes are assigned by validation, not by matching messages.
+Malformed numbers and shapes are invalid input; a valid but overflowing cumulative
+addition is numeric overflow. A retry with the last interval but different content
+is conflicting; older points, gaps and overlaps are noncontiguous. Messages can
+evolve; use the code and pointer for programmatic handling.
+
 ## Recorded batch sequences
 
 `process_sequence(state, requests)` converts up to 1024 standard OTLP requests in

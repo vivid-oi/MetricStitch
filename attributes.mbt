@@ -23,6 +23,7 @@ fn attribute_value(
   value : Json,
   depth : Int32,
   budget : Ref[Int32],
+  issue : Ref[IssueCode],
 ) -> Json raise StitchError {
   budget.val -= 1
   if depth > 16 || budget.val < 0 {
@@ -35,6 +36,7 @@ fn attribute_value(
       "kvlistValue",
     ],
     "attribute.value",
+    issue~,
   )
   if obj.length() != 1 {
     raise Invalid("attribute.value requires exactly one value kind")
@@ -63,7 +65,7 @@ fn attribute_value(
       { "bytesValue": Json(@base64.encode(bytes[:])) }
     }
     "arrayValue" => {
-      let container = fields(data, ["values"], kind)
+      let container = fields(data, ["values"], kind, issue~)
       let values = array(
         container.get("values").unwrap_or(Json::array([])),
         kind,
@@ -71,19 +73,20 @@ fn attribute_value(
       {
         "arrayValue": {
           "values": Json::array(
-            values.map(v => attribute_value(v, depth + 1, budget)),
+            values.map(v => attribute_value(v, depth + 1, budget, issue)),
           ),
         },
       }
     }
     "kvlistValue" => {
-      let container = fields(data, ["values"], kind)
+      let container = fields(data, ["values"], kind, issue~)
       {
         "kvlistValue": {
           "values": attributes(
             container.get("values").unwrap_or(Json::array([])),
             depth=depth + 1,
             budget~,
+            issue~,
           ),
         },
       }

@@ -68,13 +68,14 @@ async fn execute() -> Unit {
   let input = args[if to_file || checking { 2 } else { 1 }]
   let request = read_json(input)
   if checking {
-    let diagnostic = @metricstitch.validate_otlp(state, request)
+    let diagnostic = @metricstitch.diagnose_otlp(state, request)
     let report : Json = match diagnostic {
       None => { "valid": true, "diagnostic": null }
       Some(d) =>
         {
           "valid": false,
           "diagnostic": {
+            "code": Json(d.code.code()),
             "pointer": Json(d.pointer),
             "message": Json(d.message),
           },

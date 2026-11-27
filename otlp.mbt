@@ -22,18 +22,19 @@ fn attributes(
   value : Json,
   depth~ : Int32 = 0,
   budget~ : Ref[Int32] = Ref(4096),
+  issue~ : Ref[IssueCode] = Ref(InvalidInput),
 ) -> Json raise StitchError {
   let items = array(value, "attributes")
   let sorted : Array[(String, Json)] = []
   let seen : Map[String, Bool] = Map([])
   for item in items {
-    let pair = fields(item, ["key", "value"], "attribute")
+    let pair = fields(item, ["key", "value"], "attribute", issue~)
     let key = text(required(pair, "key"), "attribute.key")
     if seen.contains(key) {
       raise Invalid("duplicate attribute key " + key)
     }
     seen[key] = true
-    let v = attribute_value(required(pair, "value"), depth, budget)
+    let v = attribute_value(required(pair, "value"), depth, budget, issue)
     sorted.push((key, { "key": Json(key), "value": v }))
   }
   sorted.sort_by((a, b) => a.0.compare(b.0))
@@ -41,15 +42,23 @@ fn attributes(
 }
 
 ///|
-fn metadata(value : Json, scope~ : Bool) -> Json raise StitchError {
+fn metadata(
+  value : Json,
+  scope~ : Bool,
+  issue~ : Ref[IssueCode],
+) -> Json raise StitchError {
   let allowed = if scope {
     ["name", "version", "attributes", "droppedAttributesCount"]
   } else {
     ["attributes", "droppedAttributesCount"]
   }
-  let obj = fields(value, allowed, "metadata")
-  let attrs = attributes(obj.get("attributes").unwrap_or(Json::array([])))
+  let obj = fields(value, allowed, "metadata", issue~)
+  let attrs = attributes(
+    obj.get("attributes").unwrap_or(Json::array([])),
+    issue~,
+  )
   if obj.get("droppedAttributesCount").unwrap_or(Json(0)) != Json(0) {
+    issue.val = UnsupportedData
     raise Invalid("dropped attributes cannot be reconstructed")
   }
   if scope {
@@ -74,8 +83,9 @@ fn process_otlp_impl(
   request : Json,
   location : Ref[String],
   cumulative~ : Bool = false,
+  issue~ : Ref[IssueCode] = Ref(InvalidInput),
 ) -> OtlpStep raise StitchError {
-  let root = fields(request, ["resourceMetrics"], "request")
+  let root = fields(request, ["resourceMetrics"], "request", issue~)
   location.val = "/resourceMetrics"
   let resources = array(required(root, "resourceMetrics"), "resourceMetrics")
   let output = []
@@ -88,11 +98,13 @@ fn process_otlp_impl(
       resource,
       ["resource", "scopeMetrics", "schemaUrl"],
       "resourceMetrics[]",
+      issue~,
     )
     location.val = resource_path + "/resource"
     let resource_id = metadata(
       r.get("resource").unwrap_or(Json::empty_object()),
       scope=false,
+      issue~,
     )
     location.val = resource_path + "/schemaUrl"
     let rschema = text(
@@ -104,11 +116,17 @@ fn process_otlp_impl(
     for si, scope in array(required(r, "scopeMetrics"), "scopeMetrics") {
       let scope_path = resource_path + "/scopeMetrics/" + si.to_string()
       location.val = scope_path
-      let s = fields(scope, ["scope", "metrics", "schemaUrl"], "scopeMetrics[]")
+      let s = fields(
+        scope,
+        ["scope", "metrics", "schemaUrl"],
+        "scopeMetrics[]",
+        issue~,
+      )
       location.val = scope_path + "/scope"
       let scope_id = metadata(
         s.get("scope").unwrap_or(Json::empty_object()),
         scope=true,
+        issue~,
       )
       location.val = scope_path + "/schemaUrl"
       let sschema = text(
@@ -124,6 +142,7 @@ fn process_otlp_impl(
           metric,
           ["name", "description", "unit", "sum", "histogram", "gauge"],
           "metric",
+          issue~,
         )
         let kinds = ["sum", "histogram", "gauge"].filter(k => m.contains(k))
         guard kinds is [kind] else {
@@ -140,7 +159,12 @@ fn process_otlp_impl(
           "metric.description",
         )
         if kind == "gauge" {
-          validate_gauge(required(m, "gauge"), location, metric_path + "/gauge")
+          validate_gauge(
+            required(m, "gauge"),
+            location,
+            metric_path + "/gauge",
+            issue~,
+          )
           metrics.push(metric)
           continue
         }
@@ -153,10 +177,12 @@ fn process_otlp_impl(
             ["dataPoints", "aggregationTemporality", "isMonotonic"]
           },
           name + "." + kind,
+          issue~,
         )
         if required(sum, "aggregationTemporality") !=
           Json(if cumulative { 2 } else { 1 }) ||
           (!is_histogram && required(sum, "isMonotonic") != Json(true)) {
+          issue.val = UnsupportedData
           raise Invalid(name + ": unexpected temporality or non-monotonic Sum")
         }
         let points = []
@@ -178,12 +204,17 @@ fn process_otlp_impl(
               ]
             },
             name + ".dataPoint",
+            issue~,
           )
           if p.get("flags").unwrap_or(Json(0)) != Json(0) ||
             !array(p.get("exemplars").unwrap_or(Json::array([])), "exemplars").is_empty() {
+            issue.val = UnsupportedData
             raise Invalid(name + ": flags and exemplars unsupported")
           }
-          let attrs = attributes(p.get("attributes").unwrap_or(Json::array([])))
+          let attrs = attributes(
+            p.get("attributes").unwrap_or(Json::array([])),
+            issue~,
+          )
           let identity = Json::array([
             resource_id,
             scope_id,
@@ -204,9 +235,10 @@ fn process_otlp_impl(
           }
           let converted = if is_histogram {
             let point_state = if cumulative { State::new() } else { current }
-            let step = point_state.apply_histograms([
-              read_histogram(identity, p),
-            ])
+            let step = point_state.apply_histogram_impl(
+              [read_histogram(identity, p)],
+              issue,
+            )
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, histogram_json(p)))
@@ -218,7 +250,7 @@ fn process_otlp_impl(
               value: decimal(required(p, "asInt"), "asInt"),
             }
             let point_state = if cumulative { State::new() } else { current }
-            let step = point_state.apply([sample])
+            let step = point_state.apply_int_impl([sample], issue)
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value.to_string())))
@@ -230,7 +262,7 @@ fn process_otlp_impl(
               value: finite_nonnegative(required(p, "asDouble")),
             }
             let point_state = if cumulative { State::new() } else { current }
-            let step = point_state.apply_doubles([sample])
+            let step = point_state.apply_double_impl([sample], issue)
             current = step.state
             duplicates += step.duplicates
             step.points.map(p => (p.start, Json(p.value)))

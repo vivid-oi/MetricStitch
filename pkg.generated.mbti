@@ -8,6 +8,8 @@ import {
 // Values
 pub fn decode_receipt(@json.Json) -> OtlpStep raise StitchError
 
+pub fn diagnose_otlp(State, @json.Json) -> DiagnosticDetail?
+
 pub fn parse_input(String) -> @json.Json raise StitchError
 
 pub fn process_otlp(State, @json.Json) -> OtlpStep raise StitchError
@@ -23,6 +25,12 @@ pub suberror StitchError {
 
 // Types and methods
 pub(all) struct Diagnostic {
+  pointer : String
+  message : String
+}
+
+pub(all) struct DiagnosticDetail {
+  code : IssueCode
   pointer : String
   message : String
 }
@@ -63,6 +71,20 @@ pub(all) struct HistogramStep {
   points : Array[HistogramSample]
   duplicates : Int32
 }
+
+#derive(Eq)
+pub(all) enum IssueCode {
+  InvalidInput
+  UnsupportedData
+  NoncontiguousInterval
+  ConflictingRetry
+  SeriesLimit
+  NumericOverflow
+  KindChanged
+}
+pub fn IssueCode::code(Self) -> String
+pub fn IssueCode::equal(Self, Self) -> Bool
+pub fn IssueCode::not_equal(Self, Self) -> Bool
 
 pub(all) struct OtlpStep {
   state : State

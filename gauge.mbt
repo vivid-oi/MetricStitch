@@ -4,9 +4,10 @@ fn validate_gauge(
   value : Json,
   location : Ref[String],
   path : String,
+  issue~ : Ref[IssueCode],
 ) -> Unit raise StitchError {
   location.val = path
-  let gauge = fields(value, ["dataPoints"], "gauge")
+  let gauge = fields(value, ["dataPoints"], "gauge", issue~)
   location.val = path + "/dataPoints"
   for i, point in array(required(gauge, "dataPoints"), "gauge.dataPoints") {
     location.val = path + "/dataPoints/" + i.to_string()
@@ -17,8 +18,9 @@ fn validate_gauge(
         "exemplars",
       ],
       "gauge point",
+      issue~,
     )
-    ignore(attributes(p.get("attributes").unwrap_or(Json::array([]))))
+    ignore(attributes(p.get("attributes").unwrap_or(Json::array([])), issue~))
     let end = decimal(required(p, "timeUnixNano"), "timeUnixNano")
     let start = decimal(
       p.get("startTimeUnixNano").unwrap_or(Json("0")),
@@ -39,6 +41,7 @@ fn validate_gauge(
     }
     if p.get("flags").unwrap_or(Json(0)) != Json(0) ||
       !array(p.get("exemplars").unwrap_or(Json::array([])), "exemplars").is_empty() {
+      issue.val = UnsupportedData
       raise Invalid("gauge flags and exemplars unsupported")
     }
   }

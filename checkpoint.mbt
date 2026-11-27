@@ -3,10 +3,12 @@ fn fields(
   value : Json,
   allowed : Array[String],
   path : String,
+  issue~ : Ref[IssueCode] = Ref(InvalidInput),
 ) -> Map[String, Json] raise StitchError {
   guard value is Object(obj) else { raise Invalid(path + ": expected object") }
   for key in obj.keys() {
     if !allowed.contains(key) {
+      issue.val = UnsupportedData
       raise Invalid(path + ": unsupported field " + key)
     }
   }

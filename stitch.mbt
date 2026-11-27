@@ -69,12 +69,22 @@ pub fn State::apply(
   self : State,
   batch : Array[Sample],
 ) -> Step raise StitchError {
+  self.apply_int_impl(batch, Ref(InvalidInput))
+}
+
+///|
+fn State::apply_int_impl(
+  self : State,
+  batch : Array[Sample],
+  issue : Ref[IssueCode],
+) -> Step raise StitchError {
   let records = self.records.copy()
   let points = []
   let mut duplicates = 0
   for sample in batch {
     if self.doubles.any(r => r.last.series == sample.series) ||
       self.histograms.any(r => r.last_hist.series == sample.series) {
+      issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
     if sample.series.is_empty() ||
@@ -96,6 +106,7 @@ pub fn State::apply(
     let next : Record = if index < 0 {
       if records.length() + self.doubles.length() + self.histograms.length() ==
         self.limit {
+        issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
       { last: sample, origin: sample.start, total: sample.value, }
@@ -106,9 +117,16 @@ pub fn State::apply(
         continue
       }
       if sample.start != old.last.end {
+        issue.val = interval_issue(
+          sample.start,
+          sample.end,
+          old.last.start,
+          old.last.end,
+        )
         raise Invalid("noncontiguous interval for " + sample.series)
       }
       if sample.value > 9223372036854775807L - old.total {
+        issue.val = NumericOverflow
         raise Invalid("Int64 cumulative overflow")
       }
       { last: sample, origin: old.origin, total: old.total + sample.value, }

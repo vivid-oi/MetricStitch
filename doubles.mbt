@@ -60,6 +60,15 @@ pub fn State::apply_doubles(
   self : State,
   batch : Array[DoubleSample],
 ) -> DoubleStep raise StitchError {
+  self.apply_double_impl(batch, Ref(InvalidInput))
+}
+
+///|
+fn State::apply_double_impl(
+  self : State,
+  batch : Array[DoubleSample],
+  issue : Ref[IssueCode],
+) -> DoubleStep raise StitchError {
   let records = self.doubles.copy()
   let points = []
   let mut duplicates = 0
@@ -73,6 +82,7 @@ pub fn State::apply_doubles(
     ignore(finite_nonnegative(Json(sample.value)))
     if self.records.any(r => r.last.series == sample.series) ||
       self.histograms.any(r => r.last_hist.series == sample.series) {
+      issue.val = KindChanged
       raise Invalid("series changed numeric kind")
     }
     let mut index = -1
@@ -85,6 +95,7 @@ pub fn State::apply_doubles(
     let next : DoubleRecord = if index < 0 {
       if records.length() + self.records.length() + self.histograms.length() ==
         self.limit {
+        issue.val = SeriesLimit
         raise Invalid("series limit exceeded")
       }
       { last: sample, origin: sample.start, total: sample.value, }
@@ -95,10 +106,17 @@ pub fn State::apply_doubles(
         continue
       }
       if sample.start != old.last.end {
+        issue.val = interval_issue(
+          sample.start,
+          sample.end,
+          old.last.start,
+          old.last.end,
+        )
         raise Invalid("noncontiguous Double interval for " + sample.series)
       }
       let total = old.total + sample.value
       if total.is_inf() {
+        issue.val = NumericOverflow
         raise Invalid("Double cumulative overflow")
       }
       { last: sample, origin: old.origin, total, }

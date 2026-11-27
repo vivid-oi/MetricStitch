@@ -1,5 +1,7 @@
 # MetricStitch
 
+[中文快速入门](README.zh-CN.md) · [Changes](CHANGELOG.md) · [Compatibility and packaging](docs/release.md)
+
 A portable, bounded delta-to-cumulative processing library for MoonBit.
 Its consumers are telemetry gateways and offline OTLP replay tools.
 

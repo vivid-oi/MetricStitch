@@ -82,6 +82,7 @@ async fn main {
   let bad = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
   let checked_bad = @shell.Cmd(moon,prefix + ["check",input,checkpoint]).output()
   if checked_bad.exit_code() != 2 || !checked_bad.stdout().contains("\"valid\":false") { fail("read-only gate accepted invalid input") }
+  guard @json.parse(checked_bad.stdout()) is {"valid": False, "diagnostic": {"code": String("unsupported_data"), "pointer": String(""), ..}, ..} else { fail("CLI did not retain structured error code and pointer") }
   if bad.exit_code() != 2 || !bad.stdout().is_empty() || @fs.read_file(checkpoint[:]).text() != saved.stringify() { fail("rejected input damaged a checkpoint") }
   let refused_file = dir + "/refused.json"
   let refused = @shell.Cmd(moon,prefix + ["apply-to",input,refused_file,receipt]).output()

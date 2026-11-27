@@ -1,0 +1,8 @@
+integration/
+**/_build/
+**/.mooncakes/
+collector.tar.gz
+otelcol
+otelcol.exe
+session-receipt.json
+session-otlp.json

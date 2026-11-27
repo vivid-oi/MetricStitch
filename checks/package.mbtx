@@ -1,0 +1,55 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+}
+----
+async fn main {
+  let args = @env.args()
+  let moon = if args.length() > 1 { args[1] } else { "moon" }
+  let target = if args.length() > 2 { args[2] } else { "wasm" }
+  if !@fs.read_file("moon.mod").text().contains("version = \"0.2.0\"") {
+    fail("package checker expects source version 0.2.0")
+  }
+  @shell.Cmd(moon, ["package"]).run()
+  let archive = @fs.realpath("_build/publish/vivid-oi-metricstitch-0.2.0.zip")
+  let windows = @async.platform is Windows
+  let listing = if windows {
+    @shell.Cmd("tar", ["-tf", archive]).output()
+  } else { @shell.Cmd("unzip", ["-Z1", archive]).output() }
+  listing.check()
+  let files = listing.stdout().split("\n").map(s => s.trim().to_owned()).collect()
+  for file in files {
+    if file.contains("_build/") || file.contains(".mooncakes/") || file.has_prefix("integration/") ||
+      file.has_suffix(".wasm") || file.has_suffix(".mi") || file.has_suffix(".core") {
+      fail("development artifact leaked into archive: " + file)
+    }
+  }
+  for required in ["LICENSE", "SOURCES.md", "README.md", "README.zh-CN.md", "moon.mod", "moon.pkg", "pkg.generated.mbti", "reorder.mbt", "examples/UPSTREAM-LICENSE"] {
+    if !files.contains(required) { fail("missing archive file: " + required) }
+  }
+  let dir = @fs.tmpdir(prefix="metricstitch-package-")
+  let resolved = @fs.realpath(dir[:])
+  defer {
+    // Delete only our originally resolved unique temporary root.
+    if @fs.realpath(dir[:]) != resolved || !resolved.contains("metricstitch-package-") {
+      fail("temporary directory changed; refusing recursive cleanup")
+    }
+    @fs.rmdir(dir[:], recursive=true)
+  }
+  let library = dir + "/library"
+  let consumer = dir + "/consumer"
+  @fs.mkdir(library[:])
+  @fs.mkdir(consumer[:])
+  if windows { @shell.Cmd("tar", ["-xf", archive, "-C", library]).run() }
+  else { @shell.Cmd("unzip", ["-q", archive, "-d", library]).run() }
+  @fs.write_file((dir + "/moon.work")[:], "members = [\"library\", \"consumer\"]\n")
+  for file in ["moon.mod", "moon.pkg", "main.mbt"] {
+    @fs.write_file((consumer + "/" + file)[:], @fs.read_file(("integration/consumer/" + file)[:]))
+  }
+  @shell.Cmd(moon, ["-C", library, "test", "--target", target, "--deny-warn"]).run()
+  @shell.Cmd(moon, ["-C", dir, "run", "--target", target, "consumer"]).run()
+  println("Packaged 0.2.0 archive passed tests and external consumer (" + target + ")")
+}

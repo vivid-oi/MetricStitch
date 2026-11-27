@@ -49,6 +49,7 @@ jobs:
       - run: moon run --target native examples/reorder
       - run: moon -C integration run --target native consumer
       - run: moon run checks/replay.mbtx -- moon native
+      - run: moon run checks/package.mbtx -- moon native
   collector:
     runs-on: ubuntu-latest
     steps:
@@ -62,3 +63,19 @@ jobs:
       - run: sha256sum --check checks/collector.sha256
       - run: tar -xzf collector.tar.gz otelcol
       - run: moon run checks/collector.mbtx -- ./otelcol
+  package:
+    needs: [portable, native, collector]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hustcer/setup-moonbit@v1.22
+        with:
+          version: 0.10.19+bee578715
+          core-version: 0.10.19+bee578715
+      - run: moon update
+      - run: moon run checks/package.mbtx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metricstitch-0.2.0-source
+          path: _build/publish/vivid-oi-metricstitch-0.2.0.zip
+          if-no-files-found: error

@@ -5,5 +5,5 @@ version = "0.1.0"
 license = "Apache-2.0"
 
 import {
-  "vivid-oi/metricstitch@0.1.0",
+  "vivid-oi/metricstitch@0.2.0",
 }

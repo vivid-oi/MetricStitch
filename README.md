@@ -37,6 +37,8 @@ This is protocol-model interoperability validation. A separate
 [Collector integration](docs/collector.md) checks a real pinned receiver and
 file exporter, plus a separate consumer module. `checks/replay.mbtx` exercises these same commands in
 a temporary directory on Wasm and all three native CI operating systems.
+An [independent accumulation comparison](docs/differential.md) compares the
+shared profile against Collector Contrib's own delta-to-cumulative processor.
 
 Direct library callers provide series keys. `State::checkpoint` returns versioned
 JSON with exact decimal strings and sorted series. `State::restore` validates

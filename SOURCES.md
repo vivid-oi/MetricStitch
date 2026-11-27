@@ -1,5 +1,10 @@
 # Sources and licenses
 
+* `checks/differential.mbtx` creates synthetic multi-interval cases and compares
+  outputs against Collector Contrib 0.166.0 (Apache-2.0), using the existing
+  test-only community OTLP models. No upstream processor or test code is copied.
+  https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.166.0/processor/deltatocumulativeprocessor
+
 * Project implementation, tests and replay adapter are authored for MetricStitch,
   Apache-2.0.
 * `examples/upstream-metrics.json` is copied unchanged from OpenTelemetry Proto,

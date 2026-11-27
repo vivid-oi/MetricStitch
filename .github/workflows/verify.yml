@@ -63,8 +63,21 @@ jobs:
       - run: sha256sum --check checks/collector.sha256
       - run: tar -xzf collector.tar.gz otelcol
       - run: moon run checks/collector.mbtx -- ./otelcol
+  differential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hustcer/setup-moonbit@v1.22
+        with:
+          version: 0.10.19+bee578715
+          core-version: 0.10.19+bee578715
+      - run: moon update
+      - run: curl --fail --location --retry 3 --output contrib.tar.gz https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.166.0/otelcol-contrib_0.166.0_linux_amd64.tar.gz
+      - run: sha256sum --check checks/contrib.sha256
+      - run: tar -xzf contrib.tar.gz otelcol-contrib
+      - run: moon run checks/differential.mbtx -- ./otelcol-contrib
   package:
-    needs: [portable, native, collector]
+    needs: [portable, native, collector, differential]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -2,6 +2,9 @@ integration/
 **/_build/
 **/.mooncakes/
 collector.tar.gz
+contrib.tar.gz
+otelcol-contrib
+otelcol-contrib.exe
 otelcol
 otelcol.exe
 session-receipt.json

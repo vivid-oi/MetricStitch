@@ -1,0 +1,125 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/process",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbit-community/opentelemetry@0.1.8/protocol/collector/metrics/v1" @wire,
+}
+----
+
+fn fixture(i : Int) -> Json {
+  let epoch = 1544712660000000000L
+  let start = (epoch + i.to_int64() * 1000000000L).to_string()
+  let end = (epoch + (i + 1).to_int64() * 1000000000L).to_string()
+  let metrics : Array[Json] = []
+  for kind in ["integer", "double", "histogram", "gauge"] {
+    let points : Array[Json] = []
+    for j in 0..<2 {
+      let p : Map[String, Json] = {
+        "attributes": [{"key":"worker","value":{"stringValue":Json(j.to_string())}}],
+        "startTimeUnixNano": Json(start), "timeUnixNano": Json(end),
+      }
+      match kind {
+        "integer" => p["asInt"] = Json((if i == 0 { 9007199254740993L } else { ((i + j) % 7).to_int64() }).to_string())
+        "double" => p["asDouble"] = Json(((i * 17 + j) % 13).to_double() * 0.25)
+        "gauge" => p["asInt"] = Json((i - j - 10).to_string())
+        _ => {
+          let count = i % 3 + j + 2
+          p["count"] = Json(count.to_string())
+          p["bucketCounts"] = [Json((i % 3).to_string()), "1", Json((j + 1).to_string()), "0"]
+          p["explicitBounds"] = [0, 1, 10]
+          p["sum"] = Json(0.5 + (j + 1).to_double() * 5.0)
+          p["min"] = Json(if i % 3 > 0 { 0.0 } else { 0.5 })
+          p["max"] = Json(5)
+        }
+      }
+      points.push(Json::object(p))
+    }
+    let metric : Map[String, Json] = { "name":Json("diff." + kind), "unit": "1", "description":"seeded shared-profile fixture" }
+    let data : Map[String, Json] = {"dataPoints":Json::array(points)}
+    if kind != "gauge" { data["aggregationTemporality"] = Json(1) }
+    if kind == "integer" || kind == "double" { data["isMonotonic"] = Json(true) }
+    metric[if kind == "histogram" || kind == "gauge" { kind } else { "sum" }] = Json::object(data)
+    metrics.push(Json::object(metric))
+  }
+  {"resourceMetrics":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"metricstitch-differential"}}]},"scopeMetrics":[{"scope":{"name":"differential","version":"1"},"metrics":Json::array(metrics)}]}]}
+}
+
+async fn send(curl : String, port : String, file : String) -> Unit {
+  let r = @shell.Cmd(curl, ["--silent", "--show-error", "--max-time", "5", "--header", "Content-Type: application/json", "--data-binary", "@" + file, "--write-out", "\n%{http_code}", "http://127.0.0.1:" + port + "/v1/metrics"]).output()
+  r.check()
+  if !r.stdout().has_suffix("\n200") || r.stdout().contains("rejectedDataPoints") { fail("OTLP HTTP rejection: " + r.stdout()) }
+}
+
+async fn lines(path : String) -> Array[String] {
+  if !@fs.exists(path[:]) { return [] }
+  @fs.read_file(path[:]).text().split("\n").filter(s => !s.trim().is_empty()).map(s => s.to_owned()).collect()
+}
+
+async fn main {
+  let args = @env.args()
+  if args.length() < 2 || args.length() > 4 { fail("usage: differential.mbtx CONTRIB_0.166.0 [MOON] [CURL]") }
+  let moon = if args.length() > 2 { args[2] } else { "moon" }
+  let curl = if args.length() > 3 { args[3] } else { "curl" }
+  let version = @shell.Cmd(args[1], ["--version"]).output()
+  version.check()
+  if !version.stdout().contains("0.166.0") { fail("expected Collector Contrib 0.166.0") }
+  let dir = @fs.tmpdir(prefix="metricstitch-differential-")
+  defer {
+    for file in @fs.readdir(dir[:]) { @fs.remove((dir + "/" + file)[:]) }
+    @fs.rmdir(dir[:])
+  }
+  let config = dir + "/collector.yaml"
+  let log = dir + "/collector.log"
+  let reference = dir + "/reference.jsonl"
+  let candidate = dir + "/candidate.jsonl"
+  @fs.write_file(config[:],
+    "receivers:\n  otlp/reference:\n    protocols:\n      http:\n        endpoint: 127.0.0.1:43181\n  otlp/candidate:\n    protocols:\n      http:\n        endpoint: 127.0.0.1:43182\n" +
+    "processors:\n  delta_to_cumulative:\n    max_stale: 24h\n    max_streams: 10000\n" +
+    "exporters:\n  file/reference:\n    path: " + Json(reference).stringify() + "\n    flush_interval: 100ms\n  file/candidate:\n    path: " + Json(candidate).stringify() + "\n    flush_interval: 100ms\n" +
+    "service:\n  pipelines:\n    metrics/reference:\n      receivers: [otlp/reference]\n      processors: [delta_to_cumulative]\n      exporters: [file/reference]\n    metrics/candidate:\n      receivers: [otlp/candidate]\n      exporters: [file/candidate]\n")
+  @async.with_task_group(async fn(group) {
+    let logging = @process.redirect_to_file(log)
+    let collector = @process.spawn(group, args[1][:], ["--config", config], stdout=logging, stderr=logging, no_console_window=true, cancel_handler=@process.hard_cancel())
+    defer collector.cancel()
+    let mut ready = false
+    for _ in 0..<100 {
+      if collector.try_wait() is Some(_) { fail("Collector exited: " + @fs.read_file(log[:]).text()) }
+      let r = @shell.Cmd(curl, ["--silent", "--max-time", "1", "--output", dir + "/probe", "--write-out", "%{http_code}", "http://127.0.0.1:43181/v1/metrics"]).output()
+      if r.stdout() == "405" { ready = true; break }
+      @async.sleep(100)
+    }
+    if !ready { fail("Collector startup timeout: " + @fs.read_file(log[:]).text()) }
+    let input = dir + "/input.json"
+    let saved = dir + "/checkpoint.json"
+    let converted = dir + "/converted.json"
+    for i in 0..<32 {
+      @fs.write_file(input[:], fixture(i).stringify())
+      let r = @shell.Cmd(moon, ["run", "--target", "wasm", "cli", "--", input] + (if i == 0 { [] } else { [saved] })).output()
+      r.check()
+      guard @json.parse(r.stdout()) is {"request": output, "checkpoint": state, ..} else { fail("candidate receipt") }
+      @fs.write_file(saved[:], state.stringify())
+      @fs.write_file(converted[:], output.stringify())
+      send(curl, "43181", input)
+      send(curl, "43182", converted)
+    }
+    let mut a : Array[String] = []
+    let mut b : Array[String] = []
+    for _ in 0..<100 {
+      a = lines(reference)
+      b = lines(candidate)
+      if a.length() >= 32 && b.length() >= 32 { break }
+      @async.sleep(100)
+    }
+    if a.length() != 32 || b.length() != 32 { fail("missing differential output: " + a.length().to_string() + "/" + b.length().to_string()) }
+    for i in 0..<32 {
+      let expected : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(a[i]))
+      let actual : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(b[i]))
+      if expected != actual { fail("semantic difference at interval " + i.to_string() + "\nreference=" + a[i] + "\ncandidate=" + b[i]) }
+    }
+    println("Differential check passed: 32 intervals, 256 points, Int64 > 2^53, Double, explicit Histogram, signed Gauge; candidate checkpoint restored between intervals")
+  })
+}

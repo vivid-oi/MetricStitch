@@ -35,6 +35,9 @@
   contiguous Counter/Gauge/Histogram requests. It omits example point and scope
   attributes, uses counter deltas 5 and 2.5, and Gauge samples 10 and 11.
   These are synthetic demonstration edits under Apache-2.0, not production data.
+* `checks/reorder.mbtx` derives a third interval from that session, using Counter
+  delta 3.5, Gauge value 12 and shifted timestamps; histogram population/buckets
+  remain unchanged. It submits arrival order 3,1,2 and validates recovery/export.
 * `checks/protocol.mbtx` uses `moonbit-community/opentelemetry` 0.1.8 generated
   protocol models and `moonbitlang/protobuf` 0.1.3 as test-only dependencies.
   Both are Apache-2.0. No processing code is copied from these projects.

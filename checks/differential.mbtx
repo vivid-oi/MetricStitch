@@ -92,6 +92,36 @@ async fn lines(path : String) -> Array[String] {
   @fs.read_file(path[:]).text().split("\n").filter(s => !s.trim().is_empty()).map(s => s.to_owned()).collect()
 }
 
+// The OTLP reorder adapter deliberately emits one group per released point.
+// Compare complete point envelopes while ignoring only grouping/arrival order.
+fn rows(value : Json) -> Array[String] raise {
+  let output : Array[String] = []
+  guard value is {"resourceMetrics":Array(resources),..} else { fail("resource rows") }
+  for resource in resources {
+    guard resource is Object(r) && r.get("scopeMetrics") is Some(Array(scopes)) else { fail("scope rows") }
+    let rh = r.copy()
+    ignore(rh.remove("scopeMetrics"))
+    for scope in scopes {
+      guard scope is Object(s) && s.get("metrics") is Some(Array(metrics)) else { fail("metric rows") }
+      let sh = s.copy()
+      ignore(sh.remove("metrics"))
+      for metric in metrics {
+        guard metric is Object(m) else { fail("metric object") }
+        for kind in ["sum","histogram","gauge","exponentialHistogram"] {
+          if m.get(kind) is Some(Object(body)) && body.get("dataPoints") is Some(Array(points)) {
+            let mh = m.copy()
+            let data = body.copy()
+            ignore(data.remove("dataPoints"))
+            mh[kind] = Json::object(data)
+            for point in points { output.push(Json::array([Json::object(rh),Json::object(sh),Json::object(mh),point]).stringify()) }
+          }
+        }
+      }
+    }
+  }
+  output
+}
+
 async fn main {
   let args = @env.args()
   if args.length() < 2 || args.length() > 4 { fail("usage: differential.mbtx CONTRIB_0.166.0 [MOON] [CURL]") }
@@ -143,20 +173,47 @@ async fn main {
       send(curl, "43181", input)
       send(curl, "43182", converted)
     }
+    for i in 0..<3 {
+      @fs.write_file(input[:],fixture(i).stringify().replace_all(old="metricstitch-differential",new="metricstitch-reordered"))
+      send(curl,"43181",input)
+    }
+    let mut previous : Array[String] = []
+    for j, i in [2,0,1] {
+      let receipt = dir + "/reorder-" + j.to_string() + ".json"
+      let exported_path = dir + "/reordered-" + j.to_string() + ".json"
+      let watermark = ["1544712660000000000","1544712661000000000","1544712663000000000"][j]
+      @fs.write_file(input[:],fixture(i).stringify().replace_all(old="metricstitch-differential",new="metricstitch-reordered"))
+      @shell.Cmd(moon,["run","--target","wasm","cli","--","reorder-to",input,receipt,watermark] + previous).run()
+      @shell.Cmd(moon,["run","--target","wasm","cli","--","export",receipt,exported_path]).run()
+      send(curl,"43182",exported_path)
+      previous = [receipt]
+    }
     let mut a : Array[String] = []
     let mut b : Array[String] = []
     for _ in 0..<100 {
       a = lines(reference)
       b = lines(candidate)
-      if a.length() >= 32 && b.length() >= 32 { break }
+      if a.length() >= 35 && b.length() >= 35 { break }
       @async.sleep(100)
     }
-    if a.length() != 32 || b.length() != 32 { fail("missing differential output: " + a.length().to_string() + "/" + b.length().to_string()) }
+    if a.length() != 35 || b.length() != 35 { fail("missing differential output: " + a.length().to_string() + "/" + b.length().to_string()) }
     for i in 0..<32 {
       let expected : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(a[i]))
       let actual : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(b[i]))
       if normalized(expected.to_json()) != normalized(actual.to_json()) { fail("semantic difference at interval " + i.to_string() + "\nreference=" + a[i] + "\ncandidate=" + b[i]) }
     }
+    let expected_rows : Array[String] = []
+    let actual_rows : Array[String] = []
+    for i in 32..<35 {
+      let expected : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(a[i]))
+      let actual : @wire.ExportMetricsServiceRequest = @json.from_json(@json.parse(b[i]))
+      for row in rows(normalized(expected.to_json())) { expected_rows.push(row) }
+      for row in rows(normalized(actual.to_json())) { actual_rows.push(row) }
+    }
+    expected_rows.sort()
+    actual_rows.sort()
+    if expected_rows.length() != 30 || expected_rows != actual_rows { fail("reordered OTLP differs from ordered reference point envelopes") }
     println("Differential check passed: 32 intervals, 320 points, Int64 > 2^53, Double, explicit/exponential Histogram, signed Gauge; candidate checkpoint restored between intervals")
+    println("Reordered OTLP check passed: arrival order 3,1,2; 30 complete point envelopes equal ordered Collector accumulation")
   })
 }

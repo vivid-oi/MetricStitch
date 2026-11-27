@@ -84,6 +84,7 @@ fn process_otlp_impl(
   location : Ref[String],
   cumulative~ : Bool = false,
   issue~ : Ref[IssueCode] = Ref(InvalidInput),
+  collecting~ : OtlpCapture? = None,
 ) -> OtlpStep raise StitchError {
   let root = fields(request, ["resourceMetrics"], "request", issue~)
   location.val = "/resourceMetrics"
@@ -113,7 +114,8 @@ fn process_otlp_impl(
     )
     let scopes = []
     location.val = resource_path + "/scopeMetrics"
-    for si, scope in array(required(r, "scopeMetrics"), "scopeMetrics") {
+    let input_scopes = array(required(r, "scopeMetrics"), "scopeMetrics")
+    for si, scope in input_scopes {
       let scope_path = resource_path + "/scopeMetrics/" + si.to_string()
       location.val = scope_path
       let s = fields(
@@ -135,7 +137,8 @@ fn process_otlp_impl(
       )
       let metrics = []
       location.val = scope_path + "/metrics"
-      for mi, metric in array(required(s, "metrics"), "metrics") {
+      let input_metrics = array(required(s, "metrics"), "metrics")
+      for mi, metric in input_metrics {
         let metric_path = scope_path + "/metrics/" + mi.to_string()
         location.val = metric_path
         let m = fields(
@@ -195,7 +198,8 @@ fn process_otlp_impl(
         let points = []
         let points_path = metric_path + "/" + kind + "/dataPoints"
         location.val = points_path
-        for pi, point in array(required(sum, "dataPoints"), "dataPoints") {
+        let input_points = array(required(sum, "dataPoints"), "dataPoints")
+        for pi, point in input_points {
           location.val = points_path + "/" + pi.to_string()
           let p = fields(
             point,
@@ -245,6 +249,30 @@ fn process_otlp_impl(
           let end = decimal(required(p, "timeUnixNano"), "timeUnixNano")
           if !is_distribution && p.contains("asInt") == p.contains("asDouble") {
             raise Invalid("point requires exactly one numeric value")
+          }
+          if collecting is Some(capture) {
+            let buffered = if is_exp {
+              Exponential(read_exp(identity, p, issue~))
+            } else if is_histogram {
+              Histogram(read_histogram(identity, p))
+            } else if p.contains("asInt") {
+              Counter({
+                series: identity,
+                start,
+                end,
+                value: decimal(required(p, "asInt"), "asInt"),
+              })
+            } else {
+              DoubleCounter({
+                series: identity,
+                start,
+                end,
+                value: finite_nonnegative(required(p, "asDouble")),
+              })
+            }
+            buffered.validate()
+            capture.add(buffered, single_otlp_point(r, s, m, kind, point))
+            continue
           }
           let converted = if is_exp {
             let point_state = if cumulative { State::new() } else { current }
@@ -317,6 +345,9 @@ fn process_otlp_impl(
             points.push(Json::object(fields))
           }
         }
+        if collecting is Some(_) && !input_points.is_empty() {
+          continue
+        }
         let sum_out = sum.copy()
         sum_out["dataPoints"] = Json::array(points)
         sum_out["aggregationTemporality"] = Json(2)
@@ -324,9 +355,17 @@ fn process_otlp_impl(
         metric_out[kind] = Json::object(sum_out)
         metrics.push(Json::object(metric_out))
       }
+      if collecting is Some(_) &&
+        metrics.is_empty() &&
+        !input_metrics.is_empty() {
+        continue
+      }
       let scope_out = s.copy()
       scope_out["metrics"] = Json::array(metrics)
       scopes.push(Json::object(scope_out))
+    }
+    if collecting is Some(_) && scopes.is_empty() && !input_scopes.is_empty() {
+      continue
     }
     let resource_out = r.copy()
     resource_out["scopeMetrics"] = Json::array(scopes)

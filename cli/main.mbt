@@ -20,23 +20,70 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && args[1] == "reorder-to" {
+    if args.length() != 5 && args.length() != 6 {
+      fail(
+        "usage: reorder-to INPUT.json OUTPUT.json WATERMARK_NS [PREVIOUS_RECEIPT.json]",
+      )
+    }
+    if args[4].is_empty() || args[4].to_array().any(c => c < '0' || c > '9') {
+      fail("watermark must be positive decimal Unix nanoseconds")
+    }
+    let watermark = @string.parse_int64(args[4][:], base=10)
+    if watermark <= 0L {
+      fail("watermark must be positive Unix nanoseconds")
+    }
+    let buffer = if args.length() == 6 {
+      @metricstitch.decode_reorder_receipt(read_json(args[5])).buffer
+    } else {
+      @metricstitch.OtlpReorderBuffer::new(
+        @metricstitch.State::new(),
+        watermark=1L,
+        max_delay_ns=60000000000L,
+      )
+    }
+    let result = buffer.push(read_json(args[2]), watermark~)
+    let encoded = @utf8.encode(result.receipt().stringify() + "\n")
+    if encoded.length() > 4000000 {
+      fail("reorder receipt exceeds 4 MB")
+    }
+    publish_receipt(args[3], encoded)
+    return
+  }
   if args.length() > 1 && (args[1] == "export" || args[1] == "inspect") {
     let exporting = args[1] == "export"
     if args.length() != (if exporting { 4 } else { 3 }) {
       fail("usage: export RECEIPT.json OUTPUT.json | inspect RECEIPT.json")
     }
-    let receipt = @metricstitch.decode_receipt(read_json(args[2]))
+    let raw = read_json(args[2])
+    let (request, report) : (Json, Json) = if raw is Object(obj) &&
+      obj.contains("buffer") {
+      let receipt = @metricstitch.decode_reorder_receipt(raw)
+      (
+        receipt.request,
+        {
+          "state": receipt.buffer.state().summary(),
+          "pending": Json(receipt.buffer.pending_count()),
+          "duplicates": Json(receipt.duplicates),
+        },
+      )
+    } else {
+      let receipt = @metricstitch.decode_receipt(raw)
+      (
+        receipt.request,
+        {
+          "state": receipt.state.summary(),
+          "duplicates": Json(receipt.duplicates),
+        },
+      )
+    }
     if exporting {
-      let output = @utf8.encode(receipt.request.stringify() + "\n")
+      let output = @utf8.encode(request.stringify() + "\n")
       if output.length() > 4000000 {
         fail("export exceeds 4 MB")
       }
       publish_receipt(args[3], output)
     } else {
-      let report : Json = {
-        "state": receipt.state.summary(),
-        "duplicates": Json(receipt.duplicates),
-      }
       @stdio.stdout.write(report.stringify() + "\n")
     }
     return

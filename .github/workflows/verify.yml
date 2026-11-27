@@ -30,6 +30,8 @@ jobs:
       - run: moon -C integration run --target ${{ matrix.target }} consumer
       - if: matrix.target == 'wasm'
         run: moon run checks/replay.mbtx -- moon wasm
+      - if: matrix.target == 'wasm'
+        run: moon run checks/reorder.mbtx -- moon wasm
   native:
     strategy:
       matrix:
@@ -51,6 +53,7 @@ jobs:
       - run: moon run --target native examples/exponential
       - run: moon -C integration run --target native consumer
       - run: moon run checks/replay.mbtx -- moon native
+      - run: moon run checks/reorder.mbtx -- moon native
       - run: moon run checks/package.mbtx -- moon native
   collector:
     runs-on: ubuntu-latest

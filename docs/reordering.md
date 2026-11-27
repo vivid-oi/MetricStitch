@@ -1,6 +1,7 @@
 # Bounded event-time reordering
 
 `ReorderBuffer` is an optional typed layer around the strict accumulator.
+For existing OTLP files use the [OTLP adapter and CLI](otlp-reordering.md).
 It accepts `BufferedPoint::Counter(Sample)`, `DoubleCounter(DoubleSample)` and
 `Histogram(HistogramSample)` and `Exponential(ExponentialSample)`. It is not an OTLP receiver or an automatic repair
 of arbitrary request ordering. Gauges do not require this accumulation layer.

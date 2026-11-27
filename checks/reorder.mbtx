@@ -1,0 +1,69 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+----
+async fn main {
+  let args = @env.args()
+  let moon = if args.length() > 1 { args[1] } else { "moon" }
+  let target = if args.length() > 2 { args[2] } else { "wasm" }
+  let dir = @fs.tmpdir(prefix="metricstitch-otlp-reorder-")
+  defer {
+    for file in @fs.readdir(dir[:]) { @fs.remove((dir + "/" + file)[:]) }
+    @fs.rmdir(dir[:])
+  }
+  guard @json.parse(@fs.read_file("examples/session.json").text()) is {"requests":[first, second],..} else { fail("session") }
+  let third = @json.parse(second.stringify())
+  guard third is {"resourceMetrics":[{"scopeMetrics":[{"metrics":Array(metrics),..}],..}],..} else { fail("third") }
+  for metric in metrics {
+    guard metric is Object(m) else { fail("metric") }
+    for kind in ["sum", "histogram", "gauge"] {
+      if m.get(kind) is Some({"dataPoints":[Object(p)],..}) {
+        p["timeUnixNano"] = Json("1544712660900000000")
+        if kind != "gauge" { p["startTimeUnixNano"] = Json("1544712660600000000") }
+        if kind == "sum" { p["asDouble"] = Json(3.5) }
+        if kind == "gauge" { p["asDouble"] = Json(12) }
+      }
+    }
+  }
+  let prefix = ["run", "--target", target, "cli", "--"]
+  let input = dir + "/input.json"
+  let r1 = dir + "/third queued.json"
+  let r2 = dir + "/first emitted.json"
+  let r3 = dir + "/recovered.json"
+  let rejected = dir + "/rejected.json"
+  let exported = dir + "/exported.json"
+  @fs.write_file(input[:], third.stringify())
+  @shell.Cmd(moon, prefix + ["reorder-to", input, r1, "1544712660000000000"]).run()
+  let inspect1 = @shell.Cmd(moon, prefix + ["inspect", r1]).output()
+  inspect1.check()
+  if !inspect1.stdout().contains("\"pending\":2") { fail("future points not retained") }
+  @fs.write_file(input[:], first.stringify())
+  @shell.Cmd(moon, prefix + ["reorder-to", input, r2, "1544712660300000000", r1]).run()
+  let original = @fs.read_file(r2[:]).text()
+  @fs.write_file(input[:], "{\"resourceMetrics\":[]}")
+  let failed = @shell.Cmd(moon, prefix + ["reorder-to", input, rejected, "1544712660900000000", r2]).output()
+  if failed.exit_code() != 2 || !failed.stderr().contains("MissingInterval") || @fs.exists(rejected[:]) || @fs.read_file(r2[:]).text() != original { fail("gap did not roll back: " + failed.stderr()) }
+  @fs.write_file(input[:], second.stringify())
+  @shell.Cmd(moon, prefix + ["reorder-to", input, r3, "1544712660900000000", r2]).run()
+  @shell.Cmd(moon, prefix + ["export", r3, exported]).run()
+  let output = @fs.read_file(exported[:]).text()
+  for expected in ["\"asDouble\":7.5", "\"asDouble\":11", "\"count\":\"4\"", "\"count\":\"6\"", "I am a Counter", "my.library"] {
+    if !output.contains(expected) { fail("missing preserved cumulative content: " + expected) }
+  }
+  let inspected = @shell.Cmd(moon, prefix + ["inspect", r3]).output()
+  inspected.check()
+  if !inspected.stdout().contains("\"pending\":0") || !inspected.stdout().contains("\"series\":2") { fail("final state summary") }
+  let overwrite = @shell.Cmd(moon, prefix + ["reorder-to", input, r3, "1544712660900000000", r2]).output()
+  if overwrite.exit_code() != 2 { fail("existing receipt overwritten") }
+  @fs.write_file(input[:], third.stringify())
+  let retry = dir + "/retry.json"
+  @shell.Cmd(moon, prefix + ["reorder-to", input, retry, "1544712660900000000", r3]).run()
+  guard @json.parse(@fs.read_file(retry[:]).text()) is {"duplicates":Number(2.0,..),..} else { fail("retry repeated accumulation") }
+  @shell.Cmd(moon, ["run", "checks/protocol.mbtx", "--", exported]).run()
+  println("OTLP file reorder 3,1,2: receipt recovery, gap rollback, metadata, counter 11, histogram 6, retry and external protocol checks passed (" + target + ")")
+}

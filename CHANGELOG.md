@@ -7,6 +7,9 @@
   OTLP conversion/export, checkpoint version 4, lifecycle and typed reorder support.
 - `BufferedPoint::Exponential` is a new enum case; exhaustive matches must handle
   it. Zero-threshold changes are explicitly unsupported and rejected.
+- Opt-in OTLP reordering retains full pending envelopes, validates typed payload
+  bindings, supports recoverable `reorder-to` receipts and existing export/inspect,
+  and compares reordered output against ordered Collector point envelopes.
 
 ## 0.2.0 — source release candidate, 2026-11-27
 

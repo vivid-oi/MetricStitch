@@ -8,6 +8,8 @@ import {
 // Values
 pub fn decode_receipt(@json.Json) -> OtlpStep raise StitchError
 
+pub fn decode_reorder_receipt(@json.Json) -> OtlpReorderStep raise BufferError
+
 pub fn diagnose_otlp(State, @json.Json) -> DiagnosticDetail?
 
 pub fn parse_input(String) -> @json.Json raise StitchError
@@ -136,6 +138,24 @@ pub(all) enum IssueCode {
 pub fn IssueCode::code(Self) -> String
 pub fn IssueCode::equal(Self, Self) -> Bool
 pub fn IssueCode::not_equal(Self, Self) -> Bool
+
+pub struct OtlpReorderBuffer {
+  // private fields
+}
+pub fn OtlpReorderBuffer::advance(Self, Int64) -> OtlpReorderStep raise BufferError
+pub fn OtlpReorderBuffer::checkpoint(Self) -> @json.Json
+pub fn OtlpReorderBuffer::new(State, watermark~ : Int64, max_pending? : Int32, max_delay_ns~ : Int64) -> Self raise BufferError
+pub fn OtlpReorderBuffer::pending_count(Self) -> Int32
+pub fn OtlpReorderBuffer::push(Self, @json.Json, watermark~ : Int64) -> OtlpReorderStep raise BufferError
+pub fn OtlpReorderBuffer::restore(@json.Json) -> Self raise BufferError
+pub fn OtlpReorderBuffer::state(Self) -> State
+
+pub(all) struct OtlpReorderStep {
+  buffer : OtlpReorderBuffer
+  request : @json.Json
+  duplicates : Int32
+}
+pub fn OtlpReorderStep::receipt(Self) -> @json.Json
 
 pub(all) struct OtlpStep {
   state : State

@@ -44,7 +44,7 @@ Windows 使用系统 `tar`。完整类型和方法见 [公开接口](pkg.generat
 | 显式桶和指数 Histogram 累积，Gauge 校验透传 | 指数 scale -10..20；零阈值变化明确拒绝；未知字段不丢弃 |
 | 原子请求与序列回放、检查点、回执、安全文件输出 | 单写者顺序由调用方保证；不保证恰好一次交付 |
 | 稳定错误码与带索引的诊断路径 | `check` 返回第一项语义错误；语法和 I/O 错误走 stderr |
-| 类型化点的有界乱序缓冲与完整待处理点恢复 | 调用方推进 watermark；OTLP 请求入口仍严格按序 |
+| 类型化点及 OTLP 的有界乱序缓冲、载荷绑定和完整恢复 | 调用方推进 watermark；原有严格入口行为不变 |
 | 状态统计与显式归档 | 调用方负责持久化、归档路由和送达确认 |
 
 核心支持 Wasm、Wasm-GC、JavaScript、Native；异步 CLI 支持 Wasm、Native。
@@ -55,6 +55,7 @@ CI 在 Linux、macOS、Windows 实际运行原生测试、示例和回放。
 - [真实 Collector 接入与独立消费模块](docs/collector.md)：固定 0.166.0，
   仅回环网络，无需私有监控平台。
 - [乱序处理契约与恢复流程](docs/reordering.md)：容量、窗口、冲突、失败回滚。
+- [现有 OTLP 文件的乱序工作流](docs/otlp-reordering.md)：保留元数据、保存回执、恢复与导出。
 - [规模与基准方法](docs/performance.md)：记录实测条件和剩余复制成本。
 - [兼容性与发布步骤](docs/release.md)：接口、检查点与打包验证范围。
 

@@ -207,6 +207,9 @@ The optional [bounded reordering layer](docs/reordering.md) accepts typed Int64,
 Double and Histogram deltas with explicit watermarks, recoverable pending state,
 strict limits and no automatic eviction. Run `moon run examples/reorder`.
 The OTLP request API remains strict and does not reorder requests automatically.
+The opt-in [OTLP reorder adapter](docs/otlp-reordering.md) retains complete
+pending metadata and exposes `reorder-to` file receipts, inspection and export.
+Run `moon run checks/reorder.mbtx -- moon wasm` for the documented 3,1,2 workflow.
 
 Network receivers and multi-writer coordination are
 planned capabilities. The current profile requires contiguous intervals. It

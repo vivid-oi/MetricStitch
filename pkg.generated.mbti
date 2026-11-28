@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn coarsen_otlp_histograms(@json.Json, Array[Double]) -> @json.Json raise StitchError
+
 pub fn decode_receipt(@json.Json) -> OtlpStep raise StitchError
 
 pub fn decode_reorder_receipt(@json.Json) -> OtlpReorderStep raise BufferError
@@ -116,6 +118,7 @@ pub(all) struct HistogramSample {
   min : Double?
   max : Double?
 }
+pub fn HistogramSample::coarsen(Self, Array[Double]) -> Self raise StitchError
 pub fn HistogramSample::equal(Self, Self) -> Bool
 pub fn HistogramSample::not_equal(Self, Self) -> Bool
 
@@ -204,6 +207,7 @@ pub fn State::apply_doubles(Self, Array[DoubleSample]) -> DoubleStep raise Stitc
 pub fn State::apply_exponentials(Self, Array[ExponentialSample]) -> ExponentialStep raise StitchError
 pub fn State::apply_histograms(Self, Array[HistogramSample]) -> HistogramStep raise StitchError
 pub fn State::checkpoint(Self) -> @json.Json
+pub fn State::coarsen_histogram(Self, String, Array[Double]) -> Self raise StitchError
 pub fn State::merge_disjoint(Self, Self) -> Self raise StitchError
 pub fn State::new(max_series? : Int32) -> Self raise StitchError
 pub fn State::partition_before(Self, Int64) -> Partition raise StitchError

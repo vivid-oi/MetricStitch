@@ -106,6 +106,17 @@ async fn main {
   hscope["metrics"] = Json::array([Json::object(hmetric)])
   hpoint["startTimeUnixNano"] = Json("1544712660000000000")
   @fs.write_file(input[:],histogram_source.stringify())
+  let bounds_file = dir + "/bounds.json"
+  let coarse_file = dir + "/coarse.json"
+  let coarse_receipt = dir + "/coarse-receipt.json"
+  @fs.write_file(bounds_file[:],"[]")
+  @shell.Cmd(moon,prefix + ["coarsen-to",input,bounds_file,coarse_file]).run()
+  if !@fs.read_file(coarse_file[:]).text().contains("\"bucketCounts\":[\"2\"]") { fail("coarsening lost population") }
+  @shell.Cmd(moon,prefix + ["apply-to",coarse_file,coarse_receipt]).run()
+  @fs.write_file(bounds_file[:],"[2]")
+  let failed_coarse = dir + "/bad-coarse.json"
+  let unsafe_layout = @shell.Cmd(moon,prefix + ["coarsen-to",input,bounds_file,failed_coarse]).output()
+  if unsafe_layout.exit_code() != 2 || @fs.exists(failed_coarse[:]) { fail("invented histogram boundary was accepted") }
   let hist_receipt = dir + "/histogram.json"
   @shell.Cmd(moon,prefix + ["apply-to",input,hist_receipt]).run()
   hpoint["startTimeUnixNano"] = Json("1544712660300000000")

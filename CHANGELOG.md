@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Exact explicit-histogram coarsening, typed state migration and `coarsen-to`
+  OTLP files; non-subset layouts are refused without interpolation or data loss.
+
 - Reattach disjoint state archives/shards with explicit conflict/capacity checks
   through `State::merge_disjoint` and atomic `merge-state` file publication.
 

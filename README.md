@@ -129,6 +129,9 @@ series index, transaction copying costs and measured workload limitations.
 
 ## Explicit histograms
 
+[Exact coarsening](docs/coarsening.md) can align compatible producer layouts
+without interpolation, including explicit migration of an existing typed state.
+
 Explicit-bucket Delta histograms are supported by `State::apply_histograms` and
 the OTLP workflow. Counts and population are nonnegative Int64 values, with
 checked addition, at most 1024 finite increasing bounds, and exactly bounds+1

@@ -20,6 +20,28 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && args[1] == "coarsen-to" {
+    if args.length() != 5 {
+      fail("usage: coarsen-to INPUT.json BOUNDS.json OUTPUT.json")
+    }
+    guard read_json(args[3]) is Array(values) else {
+      fail("bounds must be a JSON number array")
+    }
+    let bounds = values.map(v => {
+      guard v is Number(n, ..) else { fail("bounds must be JSON numbers") }
+      n
+    })
+    let result = @metricstitch.coarsen_otlp_histograms(
+      read_json(args[2]),
+      bounds,
+    )
+    let encoded = @utf8.encode(result.stringify() + "\n")
+    if encoded.length() > 4000000 {
+      fail("coarsened OTLP exceeds 4 MB")
+    }
+    publish_receipt(args[4], encoded)
+    return
+  }
   if args.length() > 1 && args[1] == "merge-state" {
     if args.length() != 5 {
       fail(

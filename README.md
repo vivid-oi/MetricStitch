@@ -1,12 +1,15 @@
 # MetricStitch
 
-Queued intervals can be diagnosed before advancing: see
-[read-only gap reports and re-fetch workflow](docs/pending-diagnostics.md).
-
 [中文快速入门](README.zh-CN.md) · [Changes](CHANGELOG.md) · [Compatibility and packaging](docs/release.md)
 
 A portable, bounded delta-to-cumulative processing library for MoonBit.
 Its consumers are telemetry gateways and offline OTLP replay tools.
+
+Source version **0.4.0** adds [state reattachment](docs/state-handoff.md),
+[exact histogram coarsening](docs/coarsening.md), [NDJSON replay](docs/streaming.md),
+[read-only gap diagnosis](docs/pending-diagnostics.md) and
+[adjacent OTLP envelope compaction](docs/compaction.md).
+It is a source release candidate, not a registry publication.
 
 The core accumulates nonnegative Int64 and finite Double deltas with explicit interval
 continuity, last-point retry detection, checked overflow and atomic batches.
@@ -187,6 +190,10 @@ order as one transaction. The result is a standard request retaining all emitted
 ResourceMetrics groups in order, a final checkpoint and total duplicate count.
 It does not coalesce groups. Failures identify `/requests/N` followed by the
 indexed input location. No partial state is returned.
+
+For cumulative exports, optional `compact-to INPUT.json OUTPUT.json` merges
+adjacent identical headers, conserving every point and its order while retaining
+empty containers. This does not change the default sequence/reorder output.
 
 For offline recordings, write `{"requests":[REQUEST_1,REQUEST_2]}` to sequence.json
 and run `moon run --target wasm cli -- replay-to sequence.json receipt.json`.

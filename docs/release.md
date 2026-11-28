@@ -1,6 +1,6 @@
 # Compatibility and release preparation
 
-Current source version: **0.3.0**. This is a prepared source release candidate,
+Current source version: **0.4.0**. This is a prepared source release candidate,
 not a claim of Mooncakes publication, an attached GitHub release or a version tag.
 
 ## Contracts
@@ -9,6 +9,13 @@ not a claim of Mooncakes publication, an attached GitHub release or a version ta
   `State::apply*`, `process_otlp`, `validate_otlp`, `Diagnostic` and
   `StitchError::Invalid(String)` retain their existing signatures and behavior.
   CLI `check` JSON adds a `code` field; consumers must allow that additive field.
+- 0.4.0 adds disjoint state reattachment, explicit histogram coarsening, bounded
+  NDJSON sessions, pending-gap reports and optional cumulative OTLP compaction.
+  Existing strict processing, reorder output grouping and checkpoint formats
+  retain their previous behavior. Replay sessions have a separate version 1
+  envelope; their record ordinals are exact decimal strings. They authenticate
+  neither input prefixes nor checkpoint/delivery correspondence. Compaction is
+  explicit and optional, preserving point order and empty-container content.
 - Core checkpoint versions 1 (integer), 2 (Double) and 3 (Histogram) remain
   readable. Version 4 adds exponential state; `BufferedPoint::Exponential` requires
   downstream exhaustive matches to be extended. Indexes are derived data and are not serialized. New buffer
@@ -41,7 +48,7 @@ moon package --list
 moon run checks/package.mbtx
 ```
 
-The final command packages `_build/publish/vivid-oi-metricstitch-0.3.0.zip`,
+The final command packages `_build/publish/vivid-oi-metricstitch-0.4.0.zip`,
 rejects leaked build/cache artifacts, checks licenses/interfaces, extracts it
 into a fresh temporary workspace, runs its core tests, and builds an independent
 consumer against the extracted library. It requires `tar` on Windows and `unzip`

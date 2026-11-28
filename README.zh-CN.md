@@ -22,9 +22,9 @@ moon run --target wasm cli -- export session-receipt.json session-otlp.json
 
 ## 接入自己的 MoonBit 模块
 
-当前源码版本为 **0.3.0**，不代表已发布至 Mooncakes。可先用 `moon.work`
+当前源码版本为 **0.4.0**，不代表已发布至 Mooncakes。可先用 `moon.work`
 同时列入本库与自己的模块，在自己模块的 `moon.mod` 声明
-`"vivid-oi/metricstitch@0.3.0"`，`moon.pkg` 导入 `"vivid-oi/metricstitch"`。
+`"vivid-oi/metricstitch@0.4.0"`，`moon.pkg` 导入 `"vivid-oi/metricstitch"`。
 现成独立模块演示：
 
 ```sh
@@ -46,6 +46,11 @@ Windows 使用系统 `tar`。完整类型和方法见 [公开接口](pkg.generat
 | 稳定错误码与带索引的诊断路径 | `check` 返回第一项语义错误；语法和 I/O 错误走 stderr |
 | 类型化点及 OTLP 的有界乱序缓冲、载荷绑定和完整恢复 | 调用方推进 watermark；原有严格入口行为不变 |
 | 状态统计与显式归档 | 调用方负责持久化、归档路由和送达确认 |
+| 不重叠状态归档合并，保留累计起点与最后重试窗口 | 任意重叠身份明确拒绝，不自动相加 |
+| 显式直方图精确粗化及状态迁移 | 目标边界必须是原边界的子集，不插值 |
+| NDJSON 流式回放、接续与原子文件导出 | 单行 4 MB；接续由调用方提供剩余记录 |
+| 完整缺口诊断及原始 OTLP 指标上下文 | 不推测未知序列缺失的起点 |
+| 相邻相同元数据分组合并 | 不聚合点值、不重排、不删除空容器 |
 
 核心支持 Wasm、Wasm-GC、JavaScript、Native；异步 CLI 支持 Wasm、Native。
 CI 在 Linux、macOS、Windows 实际运行原生测试、示例和回放。
@@ -56,6 +61,8 @@ CI 在 Linux、macOS、Windows 实际运行原生测试、示例和回放。
   仅回环网络，无需私有监控平台。
 - [乱序处理契约与恢复流程](docs/reordering.md)：容量、窗口、冲突、失败回滚。
 - [现有 OTLP 文件的乱序工作流](docs/otlp-reordering.md)：保留元数据、保存回执、恢复与导出。
+- [缺口定位与补采](docs/pending-diagnostics.md)、[流式回放](docs/streaming.md)、[OTLP 分组压缩](docs/compaction.md)。
+- [精确粗化](docs/coarsening.md)、[归档合并](docs/state-handoff.md)：完整 API、示例与拒绝条件。
 - [规模与基准方法](docs/performance.md)：记录实测条件和剩余复制成本。
 - [兼容性与发布步骤](docs/release.md)：接口、检查点与打包验证范围。
 

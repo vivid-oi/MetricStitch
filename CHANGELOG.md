@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — source release candidate, 2026-11-29
+
+- Compact adjacent identical cumulative OTLP headers without changing values,
+  metadata, empty-container events or point traversal order; `compact-to` exports
+  files atomically. Independent protocol/Collector checks exercise compacted output.
+- Source archives and the separate consumer exercise the new public workflow.
+  No registry publication or version tag is implied.
 
 - Diagnose every queued missing interval with deterministic read-only reports,
   unknown-origin markers, dry-run advance results and original OTLP context;

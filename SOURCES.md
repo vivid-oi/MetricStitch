@@ -1,5 +1,11 @@
 # Sources and licenses
 
+* Adjacent OTLP compaction and pending-gap reports are authored here under
+  Apache-2.0 and use the existing strict OTLP profile. Their synthetic unit cases
+  are project-authored. File checks reuse the credited session adaptation and
+  the project's complete-envelope comparison pattern; no upstream compactor or
+  diagnostic implementation is copied.
+
 * `checks/stream.mbtx` reuses the credited session adaptation for CRLF/replay
   checks. Its >4 MB stress case adds synthetic metric-description text and JSON
   whitespace. NDJSON framing/session/stream publication code is authored here;

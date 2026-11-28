@@ -7,6 +7,35 @@ import {
   "moonbitlang/core/json",
 }
 ----
+// Compare exact metadata and point traversal order independently of grouping.
+fn point_rows(value : Json) -> Array[String] raise {
+  let rows : Array[String] = []
+  guard value is {"resourceMetrics":Array(resources),..} else { fail("resources") }
+  for resource in resources {
+    guard resource is Object(r) && r.get("scopeMetrics") is Some(Array(scopes)) else { fail("scopes") }
+    let rh = r.copy()
+    ignore(rh.remove("scopeMetrics"))
+    for scope in scopes {
+      guard scope is Object(s) && s.get("metrics") is Some(Array(metrics)) else { fail("metrics") }
+      let sh = s.copy()
+      ignore(sh.remove("metrics"))
+      for metric in metrics {
+        guard metric is Object(m) else { fail("metric") }
+        for kind in ["sum","histogram","exponentialHistogram","gauge"] {
+          if m.get(kind) is Some(Object(body)) && body.get("dataPoints") is Some(Array(points)) {
+            let mh = m.copy()
+            let bh = body.copy()
+            ignore(bh.remove("dataPoints"))
+            mh[kind] = Json::object(bh)
+            for point in points { rows.push(Json::array([Json::object(rh),Json::object(sh),Json::object(mh),point]).stringify()) }
+          }
+        }
+      }
+    }
+  }
+  rows
+}
+
 async fn main {
   let args = @env.args()
   let moon = if args.length() > 1 { args[1] } else { "moon" }
@@ -59,6 +88,18 @@ async fn main {
   @shell.Cmd(moon, prefix + ["reorder-to", input, r3, "1544712660900000000", r2]).run()
   @shell.Cmd(moon, prefix + ["export", r3, exported]).run()
   let output = @fs.read_file(exported[:]).text()
+  let compacted = dir + "/compacted.json"
+  let again = dir + "/compacted-again.json"
+  @shell.Cmd(moon, prefix + ["compact-to", exported, compacted]).run()
+  let compact = @fs.read_file(compacted[:]).text()
+  if point_rows(@json.parse(compact)) != point_rows(@json.parse(output)) || compact.length() >= output.length() { fail("compaction changed point envelopes/order or kept repeated groups") }
+  @shell.Cmd(moon, prefix + ["compact-to", compacted, again]).run()
+  if @fs.read_file(again[:]).text() != compact { fail("compaction not idempotent") }
+  let compact_overwrite = @shell.Cmd(moon, prefix + ["compact-to", exported, compacted]).output()
+  if compact_overwrite.exit_code() != 2 || @fs.read_file(compacted[:]).text() != compact { fail("compaction overwrote destination") }
+  @fs.write_file(input[:], second.stringify())
+  let refused_compact = @shell.Cmd(moon, prefix + ["compact-to", input, dir + "/invalid-compaction.json"]).output()
+  if refused_compact.exit_code() != 2 || @fs.exists((dir + "/invalid-compaction.json")[:]) { fail("unsupported delta compaction published data") }
   for expected in ["\"asDouble\":7.5", "\"asDouble\":11", "\"count\":\"4\"", "\"count\":\"6\"", "I am a Counter", "my.library"] {
     if !output.contains(expected) { fail("missing preserved cumulative content: " + expected) }
   }
@@ -77,5 +118,6 @@ async fn main {
   @shell.Cmd(moon, prefix + ["reorder-to", input, retry, "1544712660900000000", r3]).run()
   guard @json.parse(@fs.read_file(retry[:]).text()) is {"duplicates":Number(2.0,..),..} else { fail("retry repeated accumulation") }
   @shell.Cmd(moon, ["run", "checks/protocol.mbtx", "--", exported]).run()
+  @shell.Cmd(moon, ["run", "checks/protocol.mbtx", "--", compacted]).run()
   println("OTLP file reorder 3,1,2: receipt recovery, gap rollback, metadata, counter 11, histogram 6, retry and external protocol checks passed (" + target + ")")
 }

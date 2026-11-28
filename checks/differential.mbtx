@@ -185,7 +185,10 @@ async fn main {
       @fs.write_file(input[:],fixture(i).stringify().replace_all(old="metricstitch-differential",new="metricstitch-reordered"))
       @shell.Cmd(moon,["run","--target","wasm","cli","--","reorder-to",input,receipt,watermark] + previous).run()
       @shell.Cmd(moon,["run","--target","wasm","cli","--","export",receipt,exported_path]).run()
-      send(curl,"43182",exported_path)
+      let compacted_path = dir + "/compacted-" + j.to_string() + ".json"
+      @shell.Cmd(moon,["run","--target","wasm","cli","--","compact-to",exported_path,compacted_path]).run()
+      if rows(@json.parse(@fs.read_file(exported_path[:]).text())) != rows(@json.parse(@fs.read_file(compacted_path[:]).text())) { fail("compaction changed exact envelopes/order") }
+      send(curl,"43182",compacted_path)
       previous = [receipt]
     }
     let mut a : Array[String] = []
@@ -214,6 +217,6 @@ async fn main {
     actual_rows.sort()
     if expected_rows.length() != 30 || expected_rows != actual_rows { fail("reordered OTLP differs from ordered reference point envelopes") }
     println("Differential check passed: 32 intervals, 320 points, Int64 > 2^53, Double, explicit/exponential Histogram, signed Gauge; candidate checkpoint restored between intervals")
-    println("Reordered OTLP check passed: arrival order 3,1,2; 30 complete point envelopes equal ordered Collector accumulation")
+    println("Reordered and compacted OTLP check passed: arrival order 3,1,2; 30 complete point envelopes equal ordered Collector accumulation")
   })
 }

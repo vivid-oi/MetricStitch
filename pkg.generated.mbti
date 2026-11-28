@@ -8,6 +8,8 @@ import {
 // Values
 pub fn coarsen_otlp_histograms(@json.Json, Array[Double]) -> @json.Json raise StitchError
 
+pub fn compact_otlp(@json.Json) -> @json.Json raise StitchError
+
 pub fn decode_receipt(@json.Json) -> OtlpStep raise StitchError
 
 pub fn decode_reorder_receipt(@json.Json) -> OtlpReorderStep raise BufferError

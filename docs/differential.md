@@ -55,5 +55,7 @@ An additional adapter comparison sends three requests in ordered form to the
 reference and arrival order 3,1,2 to the file-based OTLP reorder workflow. All
 30 complete point envelopes are compared after normalizing grouping and arrival
 order. No point value or metadata is excluded. This checks the typed buffer's
-OTLP binding, checkpoint recovery and export together; see
+OTLP binding, checkpoint recovery, optional adjacent-header compaction and export
+together. Before sending, the checker also compares exact ordered point envelopes
+before/after compaction, without normalizing away metadata differences; see
 [OTLP reordering](otlp-reordering.md).

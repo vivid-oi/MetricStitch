@@ -20,6 +20,19 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && args[1] == "compact-to" {
+    if args.length() != 4 {
+      fail("usage: compact-to CUMULATIVE_OTLP.json OUTPUT.json")
+    }
+    let output = @utf8.encode(
+      @metricstitch.compact_otlp(read_json(args[2])).stringify() + "\n",
+    )
+    if output.length() > 4000000 {
+      fail("compacted OTLP exceeds 4 MB")
+    }
+    publish_receipt(args[3], output)
+    return
+  }
   if args.length() > 1 && args[1] == "explain-reorder" {
     if args.length() != 4 {
       fail("usage: explain-reorder RECEIPT.json TARGET_WATERMARK_NS")

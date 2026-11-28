@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bounded UTF-8 NDJSON framing, immutable replay sessions and validated records;
+  stream replay/export with continuations and atomic whole-output publication.
+
 - Exact explicit-histogram coarsening, typed state migration and `coarsen-to`
   OTLP files; non-subset layouts are refused without interpolation or data loss.
 

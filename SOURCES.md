@@ -1,5 +1,10 @@
 # Sources and licenses
 
+* `checks/stream.mbtx` reuses the credited session adaptation for CRLF/replay
+  checks. Its >4 MB stress case adds synthetic metric-description text and JSON
+  whitespace. NDJSON framing/session/stream publication code is authored here;
+  the existing credited temporary-file publication pattern is retained.
+
 * `checks/differential.mbtx` creates synthetic multi-interval cases and compares
   outputs against Collector Contrib 0.166.0 (Apache-2.0), using the existing
   test-only community OTLP models. No upstream processor or test code is copied.

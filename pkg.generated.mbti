@@ -12,6 +12,8 @@ pub fn decode_receipt(@json.Json) -> OtlpStep raise StitchError
 
 pub fn decode_reorder_receipt(@json.Json) -> OtlpReorderStep raise BufferError
 
+pub fn decode_replay_record(@json.Json) -> ReplayRecord raise StitchError
+
 pub fn diagnose_otlp(State, @json.Json) -> DiagnosticDetail?
 
 pub fn parse_input(String) -> @json.Json raise StitchError
@@ -142,6 +144,18 @@ pub fn IssueCode::code(Self) -> String
 pub fn IssueCode::equal(Self, Self) -> Bool
 pub fn IssueCode::not_equal(Self, Self) -> Bool
 
+pub struct NdjsonDecoder {
+  // private fields
+}
+pub fn NdjsonDecoder::feed(Self, Bytes) -> NdjsonLines raise StitchError
+pub fn NdjsonDecoder::finish(Self) -> String? raise StitchError
+pub fn NdjsonDecoder::new(max_record_bytes? : Int32) -> Self raise StitchError
+
+pub(all) struct NdjsonLines {
+  decoder : NdjsonDecoder
+  lines : Array[String]
+}
+
 pub struct OtlpReorderBuffer {
   // private fields
 }
@@ -188,6 +202,24 @@ pub(all) struct ReorderStep {
   points : Array[BufferedPoint]
   duplicates : Int32
 }
+
+pub(all) struct ReplayRecord {
+  session : ReplaySession
+  request : @json.Json
+  duplicates : Int32
+  ordinal : Int64
+}
+pub fn ReplayRecord::receipt(Self) -> @json.Json
+
+pub struct ReplaySession {
+  // private fields
+}
+pub fn ReplaySession::apply_line(Self, String) -> ReplayRecord raise StitchError
+pub fn ReplaySession::checkpoint(Self) -> @json.Json
+pub fn ReplaySession::new(State) -> Self raise StitchError
+pub fn ReplaySession::record_count(Self) -> Int64
+pub fn ReplaySession::restore(@json.Json) -> Self raise StitchError
+pub fn ReplaySession::state(Self) -> State
 
 #derive(Eq)
 pub(all) struct Sample {

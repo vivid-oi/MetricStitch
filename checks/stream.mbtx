@@ -1,0 +1,76 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+----
+async fn main {
+  let args = @env.args()
+  let moon = if args.length()>1 { args[1] } else { "moon" }
+  let target = if args.length()>2 { args[2] } else { "wasm" }
+  let prefix=["run","--target",target,"cli","--"]
+  let dir=@fs.tmpdir(prefix="metricstitch-stream-")
+  defer { for file in @fs.readdir(dir[:]) { @fs.remove((dir+"/"+file)[:]) }; @fs.rmdir(dir[:]) }
+  guard @json.parse(@fs.read_file("examples/session.json").text()) is {"requests":[first,second],..} else {fail("session")}
+  let input=dir+"/input.ndjson"
+  let output=dir+"/receipts.ndjson"
+  let exported=dir+"/otlp.ndjson"
+  @fs.write_file(input[:],first.stringify()+"\r\n"+second.stringify())
+  @shell.Cmd(moon,prefix+["stream-to",input,output]).run()
+  let original=@fs.read_file(output[:]).text()
+  let records : Array[Json] = []
+  for line in original.split("\n") { if !line.is_empty() {records.push(@json.parse(line.to_owned()))} }
+  if records.length()!=2 { fail("stream record count") }
+  guard records[1] is {"ordinal":String("2"),"session":{"records":String("2"),..},"request":request,..} else { fail("stream receipt shape") }
+  if !request.stringify().contains("\"asDouble\":7.5") { fail("stream cumulative value") }
+  @shell.Cmd(moon,prefix+["stream-export",output,exported]).run()
+  let protocol=dir+"/protocol.json"
+  for line in @fs.read_file(exported[:]).text().split("\n") {
+    if line.is_empty() {continue}
+    @fs.write_file(protocol[:],line.to_owned())
+    @shell.Cmd(moon,["run","checks/protocol.mbtx","--",protocol]).run()
+  }
+  let prior=dir+"/previous.json"
+  @fs.write_file(prior[:],records[0].stringify())
+  let continued=dir+"/continued.ndjson"
+  @fs.write_file(input[:],second.stringify())
+  @shell.Cmd(moon,prefix+["stream-to",input,continued,prior]).run()
+  if @json.parse(@fs.read_file(continued[:]).text())!=records[1] { fail("continuation differs from full replay") }
+  let overwrite=@shell.Cmd(moon,prefix+["stream-to",input,output,prior]).output()
+  if overwrite.exit_code()!=2 || @fs.read_file(output[:]).text()!=original {fail("existing stream overwritten")}
+  let rejected=dir+"/rejected.ndjson"
+  for bad in [first.stringify()+"\n{",first.stringify()+"\n\n"] {
+    @fs.write_file(input[:],bad)
+    let result=@shell.Cmd(moon,prefix+["stream-to",input,rejected]).output()
+    if result.exit_code()!=2 || @fs.exists(rejected[:]) {fail("bad record published partial stream")}
+  }
+  @fs.write_file(input[:],b"\xff\n")
+  let invalid_utf8=@shell.Cmd(moon,prefix+["stream-to",input,rejected]).output()
+  if invalid_utf8.exit_code()!=2 || @fs.exists(rejected[:]) {fail("invalid UTF-8 accepted")}
+  @fs.write_file(input[:],records[0].stringify()+"\n"+records[0].stringify()+"\n")
+  let unordered=@shell.Cmd(moon,prefix+["stream-export",input,rejected]).output()
+  if unordered.exit_code()!=2 || @fs.exists(rejected[:]) {fail("noncontiguous export published partial output")}
+  // Both input and output exceed the ordinary whole-file CLI budget. Active
+  // state is intentionally metadata-heavy; individual records remain bounded.
+  let annotated=@json.parse(first.stringify())
+  guard annotated is {"resourceMetrics":[{"scopeMetrics":[{"metrics":[Object(metric),..],..}],..}],..} else {fail("annotated input")}
+  metric["description"]=Json(String::from_array(Array::make(60000,'x')))
+  let file=@fs.create(input[:],allow_existing=true)
+  file.write(annotated.stringify()+"\n")
+  let padding=String::from_array(Array::make(60000,' '))
+  for _ in 0..<80 {file.write("{\"resourceMetrics\":[]}"+padding+"\n")}
+  file.close()
+  let large=dir+"/large.ndjson"
+  @shell.Cmd(moon,prefix+["stream-to",input,large]).run()
+  if @fs.file_size(input[:])<=4000000L || @fs.file_size(large[:])<=4000000L {fail("large-file path was not exercised")}
+  let reader=@fs.open(large[:],mode=ReadOnly)
+  let mut last=""
+  while reader.read_until("\n") is Some(line) {last=line}
+  reader.close()
+  guard @json.parse(last) is {"ordinal":String("81"),..} else {fail("large stream ordinal")}
+  for name in @fs.readdir(dir[:]) {if name.has_suffix(".pending") {fail("temporary stream leaked")}}
+  println("NDJSON replay/export passed: CRLF, continuation, rollback, strict UTF-8, no overwrite and input/output >4 MB ("+target+")")
+}

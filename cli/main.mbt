@@ -20,6 +20,22 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && (args[1] == "stream-to" || args[1] == "stream-export") {
+    let exporting = args[1] == "stream-export"
+    if (exporting && args.length() != 4) ||
+      (!exporting && args.length() != 4 && args.length() != 5) {
+      fail(
+        "usage: stream-to INPUT.ndjson OUTPUT.ndjson [PREVIOUS_RECORD.json] | stream-export RECEIPTS.ndjson OTLP.ndjson",
+      )
+    }
+    let session = if args.length() == 5 {
+      @metricstitch.decode_replay_record(read_json(args[4])).session
+    } else {
+      @metricstitch.ReplaySession::new(@metricstitch.State::new())
+    }
+    stream_records(args[2], args[3], session, exporting~)
+    return
+  }
   if args.length() > 1 && args[1] == "coarsen-to" {
     if args.length() != 5 {
       fail("usage: coarsen-to INPUT.json BOUNDS.json OUTPUT.json")
@@ -96,7 +112,17 @@ async fn execute() -> Unit {
     }
     let raw = read_json(args[2])
     let (request, report) : (Json, Json) = if raw is Object(obj) &&
-      obj.contains("buffer") {
+      obj.contains("session") {
+      let record = @metricstitch.decode_replay_record(raw)
+      (
+        record.request,
+        {
+          "state": record.session.state().summary(),
+          "records": Json(record.ordinal.to_string()),
+          "duplicates": Json(record.duplicates),
+        },
+      )
+    } else if raw is Object(obj) && obj.contains("buffer") {
       let receipt = @metricstitch.decode_reorder_receipt(raw)
       (
         receipt.request,

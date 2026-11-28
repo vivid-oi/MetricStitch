@@ -175,6 +175,10 @@ evolve; use the code and pointer for programmatic handling.
 
 ## Recorded batch sequences
 
+For larger recordings, [streaming NDJSON replay](docs/streaming.md) provides
+bounded UTF-8 framing, per-record checkpoints and atomic `stream-to` / `stream-export`
+files without a whole-recording 4 MB limit.
+
 `process_sequence(state, requests)` converts up to 1024 standard OTLP requests in
 order as one transaction. The result is a standard request retaining all emitted
 ResourceMetrics groups in order, a final checkpoint and total duplicate count.

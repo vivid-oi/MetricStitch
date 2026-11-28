@@ -20,6 +20,23 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && args[1] == "merge-state" {
+    if args.length() != 5 {
+      fail(
+        "usage: merge-state LEFT_CHECKPOINT.json RIGHT_CHECKPOINT.json OUTPUT.json",
+      )
+    }
+    let left = @metricstitch.State::restore(read_json(args[2]))
+    let right = @metricstitch.State::restore(read_json(args[3]))
+    let result = @utf8.encode(
+      left.merge_disjoint(right).checkpoint().stringify() + "\n",
+    )
+    if result.length() > 4000000 {
+      fail("merged checkpoint exceeds 4 MB")
+    }
+    publish_receipt(args[4], result)
+    return
+  }
   if args.length() > 1 && args[1] == "reorder-to" {
     if args.length() != 5 && args.length() != 6 {
       fail(

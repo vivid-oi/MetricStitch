@@ -44,6 +44,14 @@ async fn main {
   guard @json.parse(first.stdout()) is {"checkpoint":saved,"request":result,..} else { fail("invalid receipt") }
   if !result.stringify().contains("\"aggregationTemporality\":2") { fail("not cumulative") }
   @fs.write_file(checkpoint[:],saved.stringify())
+  let empty_checkpoint = dir + "/empty-state.json"
+  let merged_checkpoint = dir + "/merged-state.json"
+  let refused_merge = dir + "/refused-merge.json"
+  @fs.write_file(empty_checkpoint[:],"{\"version\":1,\"max_series\":\"1024\",\"records\":[]}")
+  @shell.Cmd(moon,prefix + ["merge-state",checkpoint,empty_checkpoint,merged_checkpoint]).run()
+  if @json.parse(@fs.read_file(merged_checkpoint[:]).text()) != saved { fail("archive merge changed state") }
+  let collision = @shell.Cmd(moon,prefix + ["merge-state",checkpoint,checkpoint,refused_merge]).output()
+  if collision.exit_code() != 2 || @fs.exists(refused_merge[:]) || @json.parse(@fs.read_file(checkpoint[:]).text()) != saved { fail("conflicting merge published or altered state") }
   let retry = @shell.Cmd(moon,prefix + [input,checkpoint]).output()
   if retry.exit_code() != 0 || !retry.stdout().contains("\"duplicates\":1") { fail("retry duplicated the count") }
   point["startTimeUnixNano"] = Json("1544712660300000000")

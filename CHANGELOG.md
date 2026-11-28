@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Reattach disjoint state archives/shards with explicit conflict/capacity checks
+  through `State::merge_disjoint` and atomic `merge-state` file publication.
+
 ## 0.3.0 — source release candidate, 2026-11-27
 
 - Independent shared-profile differential checks against Collector Contrib 0.166.0.

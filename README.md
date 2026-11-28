@@ -196,6 +196,8 @@ points can continue through archived. Reintroducing an archived series into
 retained begins a new cumulative origin and loses its previous retry window.
 This operation is explicit, with no automatic eviction or system-clock access.
 Run `moon run examples/archive` to exercise archival and retry recovery.
+Use [`State::merge_disjoint`](docs/state-handoff.md) or CLI `merge-state` to
+reattach a disjoint archive while preserving origins and refusing conflicts.
 
 ## Roadmap
 

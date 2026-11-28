@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Diagnose every queued missing interval with deterministic read-only reports,
+  unknown-origin markers, dry-run advance results and original OTLP context;
+  `explain-reorder` makes the re-fetch/repair workflow available from saved receipts.
+
 - Bounded UTF-8 NDJSON framing, immutable replay sessions and validated records;
   stream replay/export with continuations and atomic whole-output publication.
 

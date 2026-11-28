@@ -163,6 +163,7 @@ pub fn OtlpReorderBuffer::advance(Self, Int64) -> OtlpReorderStep raise BufferEr
 pub fn OtlpReorderBuffer::checkpoint(Self) -> @json.Json
 pub fn OtlpReorderBuffer::new(State, watermark~ : Int64, max_pending? : Int32, max_delay_ns~ : Int64) -> Self raise BufferError
 pub fn OtlpReorderBuffer::pending_count(Self) -> Int32
+pub fn OtlpReorderBuffer::pending_report(Self, Int64) -> @json.Json raise BufferError
 pub fn OtlpReorderBuffer::push(Self, @json.Json, watermark~ : Int64) -> OtlpReorderStep raise BufferError
 pub fn OtlpReorderBuffer::restore(@json.Json) -> Self raise BufferError
 pub fn OtlpReorderBuffer::state(Self) -> State
@@ -186,6 +187,32 @@ pub(all) struct Partition {
   archived : State
 }
 
+#derive(Eq)
+pub(all) struct PendingGap {
+  series : String
+  start : Int64
+  end : Int64
+  next_end : Int64
+  blocks_target : Bool
+}
+pub fn PendingGap::equal(Self, Self) -> Bool
+pub fn PendingGap::not_equal(Self, Self) -> Bool
+
+pub(all) struct PendingReport {
+  watermark : Int64
+  target : Int64
+  pending : Int32
+  ready : Int32
+  capacity : Int32
+  max_delay_ns : Int64
+  oldest_end : Int64?
+  newest_end : Int64?
+  unanchored : Array[String]
+  gaps : Array[PendingGap]
+  advance_error : String?
+}
+pub fn PendingReport::to_json(Self) -> @json.Json
+
 pub struct ReorderBuffer {
   // private fields
 }
@@ -193,6 +220,7 @@ pub fn ReorderBuffer::advance(Self, Int64) -> ReorderStep raise BufferError
 pub fn ReorderBuffer::checkpoint(Self) -> @json.Json
 pub fn ReorderBuffer::new(State, watermark~ : Int64, max_pending? : Int32, max_delay_ns~ : Int64) -> Self raise BufferError
 pub fn ReorderBuffer::pending_count(Self) -> Int32
+pub fn ReorderBuffer::pending_report(Self, Int64) -> PendingReport raise BufferError
 pub fn ReorderBuffer::push(Self, Array[BufferedPoint], watermark~ : Int64) -> ReorderStep raise BufferError
 pub fn ReorderBuffer::restore(@json.Json) -> Self raise BufferError
 pub fn ReorderBuffer::state(Self) -> State

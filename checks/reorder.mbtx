@@ -45,6 +45,13 @@ async fn main {
   @fs.write_file(input[:], first.stringify())
   @shell.Cmd(moon, prefix + ["reorder-to", input, r2, "1544712660300000000", r1]).run()
   let original = @fs.read_file(r2[:]).text()
+  let explanation = @shell.Cmd(moon, prefix + ["explain-reorder", r2, "1544712660900000000"]).output()
+  explanation.check()
+  guard @json.parse(explanation.stdout()) is {"canAdvance":False, "ready":Number(2.0,..), "gaps":Array(gaps),..} && gaps.length() == 2 else { fail("complete queue diagnosis") }
+  for gap in gaps {
+    guard gap is {"start":String("1544712660300000000"), "end":String("1544712660600000000"), "blocksTarget":True, "nextRequest":Object(_),..} else { fail("missing interval/context") }
+  }
+  if @fs.read_file(r2[:]).text() != original { fail("diagnostic consumed receipt") }
   @fs.write_file(input[:], "{\"resourceMetrics\":[]}")
   let failed = @shell.Cmd(moon, prefix + ["reorder-to", input, rejected, "1544712660900000000", r2]).output()
   if failed.exit_code() != 2 || !failed.stderr().contains("MissingInterval") || @fs.exists(rejected[:]) || @fs.read_file(r2[:]).text() != original { fail("gap did not roll back: " + failed.stderr()) }
@@ -58,6 +65,11 @@ async fn main {
   let inspected = @shell.Cmd(moon, prefix + ["inspect", r3]).output()
   inspected.check()
   if !inspected.stdout().contains("\"pending\":0") || !inspected.stdout().contains("\"series\":2") { fail("final state summary") }
+  let clear = @shell.Cmd(moon, prefix + ["explain-reorder", r3, "1544712660900000000"]).output()
+  clear.check()
+  guard @json.parse(clear.stdout()) is {"canAdvance":True,"gaps":[],..} else { fail("repaired report") }
+  let backwards = @shell.Cmd(moon, prefix + ["explain-reorder", r3, "1"]).output()
+  if backwards.exit_code() != 2 { fail("backwards report accepted") }
   let overwrite = @shell.Cmd(moon, prefix + ["reorder-to", input, r3, "1544712660900000000", r2]).output()
   if overwrite.exit_code() != 2 { fail("existing receipt overwritten") }
   @fs.write_file(input[:], third.stringify())

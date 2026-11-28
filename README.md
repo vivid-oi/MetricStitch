@@ -1,5 +1,8 @@
 # MetricStitch
 
+Queued intervals can be diagnosed before advancing: see
+[read-only gap reports and re-fetch workflow](docs/pending-diagnostics.md).
+
 [中文快速入门](README.zh-CN.md) · [Changes](CHANGELOG.md) · [Compatibility and packaging](docs/release.md)
 
 A portable, bounded delta-to-cumulative processing library for MoonBit.

@@ -20,6 +20,23 @@ async fn read_json(path : String) -> Json {
 ///|
 async fn execute() -> Unit {
   let args = @env.args()
+  if args.length() > 1 && args[1] == "explain-reorder" {
+    if args.length() != 4 {
+      fail("usage: explain-reorder RECEIPT.json TARGET_WATERMARK_NS")
+    }
+    if args[3].is_empty() || args[3].to_array().any(c => c < '0' || c > '9') {
+      fail("target watermark must be positive decimal Unix nanoseconds")
+    }
+    let target = @string.parse_int64(args[3][:], base=10)
+    let buffer = @metricstitch.decode_reorder_receipt(read_json(args[2])).buffer
+    let report = buffer.pending_report(target)
+    let output = @utf8.encode(report.stringify() + "\n")
+    if output.length() > 4000000 {
+      fail("pending report exceeds 4 MB")
+    }
+    @stdio.stdout.write(output)
+    return
+  }
   if args.length() > 1 && (args[1] == "stream-to" || args[1] == "stream-export") {
     let exporting = args[1] == "stream-export"
     if (exporting && args.length() != 4) ||
